@@ -1,2 +1,5 @@
 investment_agent/.env
 .env
+.env
+*.env
+.env.*
