@@ -5,6 +5,7 @@ Expose root_agent (InvestmentAdvisor) via une API REST consommable par Next.js
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import os
@@ -16,19 +17,15 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# ── ADK imports ────────────────────────────────────────────────────────────────
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types as genai_types
 
-# ── Ton agent ─────────────────────────────────────────────────────────────────
 from investment_agent.agent import root_agent
 
-# ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ── App FastAPI ───────────────────────────────────────────────────────────────
 app = FastAPI(
     title="Investment Agent API",
     description="Plateforme d'investissement automatisée — ADK Multi-Agents",
@@ -37,21 +34,16 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# ── CORS — autorise le frontend Next.js ───────────────────────────────────────
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        FRONTEND_URL,
-    ],
+    allow_origins=["http://localhost:3000", FRONTEND_URL, "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ── ADK Runner (singleton) ────────────────────────────────────────────────────
 APP_NAME = "investment_agent"
 session_service = InMemorySessionService()
 runner = Runner(
@@ -61,22 +53,20 @@ runner = Runner(
 )
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SCHEMAS Pydantic
-# ══════════════════════════════════════════════════════════════════════════════
-
 class AnalyzeRequest(BaseModel):
-    query: str                                          # ex: "Analyse NVDA et BTC"
+    query: str
     user_id: Optional[str] = "web_user"
-    session_id: Optional[str] = None                   # auto-généré si absent
+    session_id: Optional[str] = None
+
 
 class AgentOutput(BaseModel):
-    market_analysis:    Optional[str] = None
-    news_impact:        Optional[str] = None
-    risk_assessment:    Optional[str] = None
+    market_analysis:     Optional[str] = None
+    news_impact:         Optional[str] = None
+    risk_assessment:     Optional[str] = None
     investment_strategy: Optional[str] = None
-    portfolio_decision: Optional[str] = None
-    audit_trail:        Optional[list[str]] = None
+    portfolio_decision:  Optional[str] = None
+    audit_trail:         Optional[list[str]] = None
+
 
 class AnalyzeResponse(BaseModel):
     session_id:     str
@@ -85,49 +75,48 @@ class AnalyzeResponse(BaseModel):
     status:         str = "success"
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# ENDPOINTS
-# ══════════════════════════════════════════════════════════════════════════════
+async def _call(fn, *args, **kwargs):
+    """Appelle une fonction sync ou async de façon transparente."""
+    result = fn(*args, **kwargs)
+    if inspect.isawaitable(result):
+        result = await result
+    return result
+
 
 @app.get("/health")
-async def health_check() -> dict[str, str]:
-    """Health check pour Cloud Run — doit répondre 200."""
+async def health_check():
     return {"status": "healthy", "service": "investment-agent", "model": "gemini-2.5-flash-lite"}
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
-    """
-    Lance le pipeline complet :
-    InvestmentAdvisor → AnalysisPipeline → [Market, News, Risk, Strategy, Decision]
-
-    Le message de l'utilisateur est stocké en state["user_message"] pour que
-    before_agent_callback puisse en extraire les symboles financiers.
-    """
     session_id = request.session_id or str(uuid.uuid4())
 
     try:
-        # Créer la session ADK
-        session_service.create_session(
+        # Créer la session (sync ou async selon la version ADK)
+        await _call(
+            session_service.create_session,
             app_name=APP_NAME,
             user_id=request.user_id,
             session_id=session_id,
-            state={"user_message": request.query},   # ← requis par _extract_symbols()
+            state={"user_message": request.query},
         )
 
-        # Construire le message
         message = genai_types.Content(
             role="user",
             parts=[genai_types.Part(text=request.query)],
         )
 
-        # Exécuter le pipeline et collecter la réponse finale
         final_text = ""
+        state = {}
+
         async for event in runner.run_async(
             user_id=request.user_id,
             session_id=session_id,
             new_message=message,
         ):
+            if hasattr(event, "state") and event.state:
+                state.update(event.state)
             if event.is_final_response():
                 if event.content and event.content.parts:
                     for part in event.content.parts:
@@ -135,13 +124,18 @@ async def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
                             final_text = part.text
                             break
 
-        # Récupérer les output_key stockés en state par chaque LlmAgent
-        session = session_service.get_session(
-            app_name=APP_NAME,
-            user_id=request.user_id,
-            session_id=session_id,
-        )
-        state = session.state if session else {}
+        # Récupérer le state final si vide
+        if not state:
+            try:
+                final_session = await _call(
+                    session_service.get_session,
+                    app_name=APP_NAME,
+                    user_id=request.user_id,
+                    session_id=session_id,
+                )
+                state = dict(final_session.state) if final_session and final_session.state else {}
+            except Exception:
+                state = {}
 
         outputs = AgentOutput(
             market_analysis=state.get("market_analysis"),
@@ -166,7 +160,6 @@ async def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
 
 @app.get("/scenarios")
 async def list_scenarios() -> dict[str, Any]:
-    """Retourne les scénarios de test depuis tests/investment_scenarios.test.json."""
     try:
         with open("tests/investment_scenarios.test.json", "r", encoding="utf-8") as f:
             scenarios = json.load(f)
@@ -177,14 +170,9 @@ async def list_scenarios() -> dict[str, Any]:
 
 @app.get("/symbols")
 async def list_symbols() -> dict[str, list[str]]:
-    """Retourne les symboles reconnus par le pipeline."""
     from investment_agent.agent import _KNOWN_SYMBOLS
     return {"symbols": _KNOWN_SYMBOLS}
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# ENTRY POINT
-# ══════════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
