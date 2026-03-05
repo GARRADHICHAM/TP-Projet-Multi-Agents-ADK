@@ -1,0 +1,23 @@
+# ── Framework API ─────────────────────────────────────────────────────────────
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.0.0
+
+# ── Google ADK + Gemini ────────────────────────────────────────────────────────
+# Utilisé dans agent.py :
+#   from google.adk.agents import LlmAgent, SequentialAgent, LoopAgent
+#   from google.adk.runners import Runner
+#   from google.adk.sessions import InMemorySessionService
+#   from google.adk.tools import agent_tool
+#   from google.genai import types
+google-adk>=0.1.0
+google-generativeai>=0.8.0
+
+# ── Utilitaires standard (utilisés dans les tools) ────────────────────────────
+# random, datetime, typing → stdlib Python, pas d'install nécessaire
+
+# ── Variables d'environnement ─────────────────────────────────────────────────
+python-dotenv>=1.0.0
+
+# ── HTTP client (utile pour les tests et extensions futures) ──────────────────
+httpx>=0.27.0
