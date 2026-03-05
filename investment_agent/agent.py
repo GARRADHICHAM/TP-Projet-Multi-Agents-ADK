@@ -1,26 +1,31 @@
 """
-Plateforme d'investissement automatisée — Architecture ADK complète
+Plateforme d'investissement automatisée — Architecture ADK améliorée
 ====================================================================
-Modèle : gemini-2.0-flash
+Modèle : gemini-2.5-flash-lite
 
 Contraintes ADK satisfaites :
-  ✅ C1  — 5 LlmAgents distincts (MarketAnalysisAgent, NewsAgent,
+  ✅ C1  — 6 LlmAgents distincts (IntentAgent, MarketAnalysisAgent, NewsAgent,
             RiskAnalysisAgent, StrategyAgent, DecisionAgent)
-  ✅ C2  — 6 tools custom appelés en Python via before_agent_callback
-  ✅ C3  — 2 Workflow Agents différents : SequentialAgent (AnalysisPipeline)
-            + LoopAgent (StrategyRefinementLoop) intégré dans le pipeline
-  ✅ C4  — output_key sur chaque LlmAgent + templates {variable} dans
-            les instructions de DecisionAgent
+  ✅ C2  — 6 tools custom appelés via before_agent_callback
+  ✅ C3  — 2 Workflow Agents : SequentialAgent (AnalysisPipeline)
+            + LoopAgent (StrategyRefinementLoop)
+  ✅ C4  — output_key sur chaque LlmAgent + templates {variable}
   ✅ C5  — AgentTool : DecisionAgent invoque StrategyAgent comme outil
             transfer_to_agent : InvestmentAdvisor délègue à AnalysisPipeline
   ✅ C6  — 3 callbacks : before_agent_callback, before_model_callback,
             after_model_callback
   ✅ C7  — main.py avec Runner + InMemorySessionService
   ✅ C8  — Compatible adk web (root_agent exposé au niveau du package)
+
+Améliorations v2 :
+  🆕 IntentAgent  — LLM extrait symboles, capital, risk_profile, strategy
+  🆕 Plus de hardcoding — tout vient du message utilisateur
+  🆕 before_agent_callback lit le state dynamiquement
 """
 
 from __future__ import annotations
 import json
+import re
 import logging
 from typing import Optional
 
@@ -42,15 +47,8 @@ from .tools import (
 
 logger = logging.getLogger(__name__)
 
-_MODEL = "gemini-2.5-flash-lite"
+_MODEL    = "gemini-2.5-flash-lite"
 _MAX_CALLS = 3
-
-# Symboles reconnus dans le message utilisateur
-_KNOWN_SYMBOLS = [
-    "AAPL", "GOOGL", "MSFT", "NVDA", "TSLA", "AMZN", "META", "NFLX", "AMD",
-    "BTC", "ETH", "SOL", "BNB", "XRP", "DOGE",
-    "SPY", "QQQ", "GLD", "VTI",
-]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -64,33 +62,94 @@ def _log_start(name: str, state: dict) -> None:
     print(f"\n{'─'*60}\n🤖  [{count}] {name} — démarré\n{'─'*60}")
 
 
-def _extract_symbols(state: dict) -> list[str]:
-    """Extrait les symboles du message utilisateur stocké en state."""
-    raw = state.get("user_message", "")
-    found = [s for s in _KNOWN_SYMBOLS if s in raw.upper()]
-    return found if found else ["AAPL", "BTC"]
+def _clean_json(raw: str) -> dict:
+    """Nettoie et parse un JSON potentiellement entouré de backticks markdown."""
+    if not raw:
+        return {}
+    try:
+        clean = raw.strip()
+        # Supprimer les backticks markdown que le LLM peut ajouter
+        clean = re.sub(r'^```json\s*', '', clean, flags=re.MULTILINE)
+        clean = re.sub(r'^```\s*', '', clean, flags=re.MULTILINE)
+        clean = re.sub(r'\s*```$', '', clean, flags=re.MULTILINE)
+        clean = clean.strip()
+        return json.loads(clean)
+    except (json.JSONDecodeError, AttributeError):
+        return {}
+
+
+def _get_symbols(state: dict) -> list[str]:
+    """
+    Récupère les symboles extraits par IntentAgent depuis le state.
+    Fallback sur AAPL + BTC si parsing échoue.
+    """
+    data = _clean_json(state.get("intent_data", ""))
+    if data:
+        symbols = data.get("requested_symbols", [])
+        if symbols:
+            logger.info("✅ Symbols from IntentAgent: %s", symbols)
+            return symbols
+
+    # Fallback direct depuis state
+    symbols = state.get("requested_symbols", [])
+    if isinstance(symbols, str):
+        try:
+            symbols = json.loads(symbols)
+        except json.JSONDecodeError:
+            symbols = []
+    return symbols if symbols else ["AAPL", "BTC"]
+
+
+def _get_capital(state: dict) -> float:
+    """Récupère le capital depuis le state (peuplé par IntentAgent)."""
+    data = _clean_json(state.get("intent_data", ""))
+    if data:
+        capital = data.get("user_capital", 100_000)
+        try:
+            if capital and float(capital) >= 1000:
+                return float(capital)
+        except (ValueError, TypeError):
+            pass
+    return float(state.get("user_capital", 100_000))
+
+
+def _get_risk_profile(state: dict) -> str:
+    """Récupère le profil de risque depuis le state."""
+    data = _clean_json(state.get("intent_data", ""))
+    if data:
+        profile = data.get("risk_profile", "MODERATE").upper()
+        if profile in ("CONSERVATIVE", "MODERATE", "AGGRESSIVE"):
+            return profile
+    return state.get("risk_profile", "MODERATE").upper()
+
+
+def _get_strategy(state: dict) -> str:
+    """Récupère la stratégie depuis le state."""
+    data = _clean_json(state.get("intent_data", ""))
+    if data:
+        strat = data.get("investment_strategy_type", "BALANCED").upper()
+        if strat in ("SHORT_TERM", "BALANCED", "LONG_TERM"):
+            return strat
+    return state.get("investment_strategy_type", "BALANCED").upper()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CALLBACK #1 — before_agent_callback
 # Appelle les tools Python AVANT que le LLM s'exécute.
-# Stocke les résultats en state → injectés via {variable} dans les instructions.
+# Lit les paramètres dynamiquement depuis le state (peuplé par IntentAgent).
 # ══════════════════════════════════════════════════════════════════════════════
 
 def before_agent_callback(callback_context: CallbackContext) -> Optional[object]:
-    """
-    Pré-charge toutes les données nécessaires en state avant l'exécution du LLM.
-    Le LLM reçoit les données via les templates {variable} dans ses instructions.
-
-    Contraintes satisfaites : C2 (tools appelés ici), C4 ({variable} en state),
-    C6 (callback de type before_agent).
-    """
     name  = callback_context.agent_name
     state = callback_context.state
     _log_start(name, state)
 
-    symbols = _extract_symbols(state)
-    state["requested_symbols"] = json.dumps(symbols)
+    # IntentAgent n'a pas besoin de pre-fetch
+    if name == "IntentAgent":
+        return None
+
+    symbols = _get_symbols(state)
+    logger.info("🔍 Symbols for %s: %s", name, symbols)
 
     if name == "MarketAnalysisAgent":
         data = {}
@@ -115,26 +174,26 @@ def before_agent_callback(callback_context: CallbackContext) -> Optional[object]
         logger.info("✅ Risk score pre-fetched")
 
     elif name == "StrategyAgent":
-        alloc = calculate_portfolio_allocation("MODERATE", "BALANCED", 100_000)
+        capital      = _get_capital(state)
+        risk_profile = _get_risk_profile(state)
+        strategy     = _get_strategy(state)
+        logger.info("💰 Capital: $%s | Risk: %s | Strategy: %s", capital, risk_profile, strategy)
+        alloc = calculate_portfolio_allocation(risk_profile, strategy, capital)
         state["prefetched_allocation"] = json.dumps(alloc, indent=2)
+        state["user_capital_display"]  = f"${capital:,.0f}"
         logger.info("✅ Portfolio allocation pre-fetched")
 
-    return None  # None = laisser le LLM s'exécuter normalement
+    return None
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CALLBACK #2 — before_model_callback
-# Plafonne les appels LLM pour éviter les boucles infinies.
 # ══════════════════════════════════════════════════════════════════════════════
 
 def before_model_callback(
     callback_context: CallbackContext,
     llm_request: LlmRequest,
 ) -> Optional[LlmResponse]:
-    """
-    Stoppe l'agent si le nombre d'appels LLM dépasse _MAX_CALLS.
-    Contrainte satisfaite : C6 (callback de type before_model).
-    """
     name  = callback_context.agent_name
     state = callback_context.state
     key   = f"_calls_{name}"
@@ -155,17 +214,12 @@ def before_model_callback(
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CALLBACK #3 — after_model_callback
-# Journalise chaque réponse LLM dans un audit trail.
 # ══════════════════════════════════════════════════════════════════════════════
 
 def after_model_callback(
     callback_context: CallbackContext,
     llm_response: LlmResponse,
 ) -> Optional[LlmResponse]:
-    """
-    Ajoute un extrait de chaque réponse LLM à l'audit trail en state.
-    Contrainte satisfaite : C6 (callback de type after_model).
-    """
     name  = callback_context.agent_name
     state = callback_context.state
     preview = ""
@@ -182,8 +236,48 @@ def after_model_callback(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# AGENT 0 — IntentAgent  🆕
+# Premier agent du pipeline — extrait les paramètres via LLM
+# Contrainte C1 : 6ème LlmAgent
+# Contrainte C4 : output_key="intent_data"
+# ══════════════════════════════════════════════════════════════════════════════
+
+intent_agent = LlmAgent(
+    name="IntentAgent",
+    model=_MODEL,
+    description="Extrait les paramètres d'investissement depuis le message utilisateur.",
+    instruction=(
+        "You are a financial intent parser.\n\n"
+        "Analyze this user message:\n"
+        "```\n{user_message}\n```\n\n"
+        "Extract the following parameters and respond ONLY with a valid JSON object "
+        "(no markdown, no explanation, just raw JSON):\n\n"
+        "{\n"
+        '  "requested_symbols": [],     // list of ticker symbols found (e.g. ["NVDA", "BTC"])\n'
+        '  "user_capital": 100000,      // investment amount in USD (default 100000)\n'
+        '  "risk_profile": "MODERATE",  // CONSERVATIVE | MODERATE | AGGRESSIVE\n'
+        '  "investment_strategy_type": "BALANCED"  // SHORT_TERM | BALANCED | LONG_TERM\n'
+        "}\n\n"
+        "Rules:\n"
+        "- If no symbols found, use [\"AAPL\", \"BTC\"]\n"
+        "- If no amount mentioned, use 100000\n"
+        "- Detect risk from words like: aggressive/aggressif → AGGRESSIVE, "
+        "conservative/prudent/conservateur → CONSERVATIVE\n"
+        "- Detect strategy from: court terme/short → SHORT_TERM, "
+        "long terme/long → LONG_TERM\n"
+        "- Convert amounts: 50k → 50000, $1M → 1000000\n"
+        "- Recognize tickers in any language: Toyota → TM, Apple → AAPL"
+    ),
+    tools=[],
+    output_key="intent_data",                   # ← C4
+    before_agent_callback=before_agent_callback,
+    before_model_callback=before_model_callback,
+    after_model_callback=after_model_callback,
+)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # AGENT 1 — MarketAnalysisAgent
-# Contrainte C4 : output_key="market_analysis" + {prefetched_market} dans instruction
 # ══════════════════════════════════════════════════════════════════════════════
 
 market_analysis_agent = LlmAgent(
@@ -195,13 +289,14 @@ market_analysis_agent = LlmAgent(
         "Here is the pre-fetched market and technical data:\n"
         "```json\n{prefetched_market}\n```\n\n"
         "Write a structured **Market Analysis Report** covering:\n"
-        "1. For each asset: current price, 24h change, RSI signal, MACD signal, trend.\n"
-        "2. Key support/resistance levels based on moving averages.\n"
-        "3. Overall market bias: RISK-ON, RISK-OFF, or MIXED.\n\n"
+        "1. Price action and 24h performance per asset.\n"
+        "2. Technical signals: RSI, MACD, moving averages, Bollinger Bands.\n"
+        "3. Volume analysis and market cap context.\n"
+        "4. Overall market trend: BULLISH / BEARISH / MIXED.\n\n"
         "Be concise and data-driven. Do NOT call any tools."
     ),
     tools=[],
-    output_key="market_analysis",          # ← C4 : output_key
+    output_key="market_analysis",               # ← C4
     before_agent_callback=before_agent_callback,
     before_model_callback=before_model_callback,
     after_model_callback=after_model_callback,
@@ -210,7 +305,6 @@ market_analysis_agent = LlmAgent(
 
 # ══════════════════════════════════════════════════════════════════════════════
 # AGENT 2 — NewsAgent
-# Contrainte C4 : output_key="news_impact" + {prefetched_news} + {prefetched_macro}
 # ══════════════════════════════════════════════════════════════════════════════
 
 news_agent = LlmAgent(
@@ -231,7 +325,7 @@ news_agent = LlmAgent(
         "Be concise and data-driven. Do NOT call any tools."
     ),
     tools=[],
-    output_key="news_impact",              # ← C4 : output_key
+    output_key="news_impact",                   # ← C4
     before_agent_callback=before_agent_callback,
     before_model_callback=before_model_callback,
     after_model_callback=after_model_callback,
@@ -240,7 +334,6 @@ news_agent = LlmAgent(
 
 # ══════════════════════════════════════════════════════════════════════════════
 # AGENT 3 — RiskAnalysisAgent
-# Contrainte C4 : output_key="risk_assessment" + {prefetched_risk}
 # ══════════════════════════════════════════════════════════════════════════════
 
 risk_analysis_agent = LlmAgent(
@@ -260,7 +353,7 @@ risk_analysis_agent = LlmAgent(
         "Be concise and data-driven. Do NOT call any tools."
     ),
     tools=[],
-    output_key="risk_assessment",          # ← C4 : output_key
+    output_key="risk_assessment",               # ← C4
     before_agent_callback=before_agent_callback,
     before_model_callback=before_model_callback,
     after_model_callback=after_model_callback,
@@ -269,10 +362,6 @@ risk_analysis_agent = LlmAgent(
 
 # ══════════════════════════════════════════════════════════════════════════════
 # AGENT 4 — StrategyAgent
-# Utilisé de deux façons :
-#   (a) dans StrategyRefinementLoop (LoopAgent) — C3
-#   (b) comme AgentTool dans DecisionAgent — C5
-# Contrainte C4 : output_key="investment_strategy" + {prefetched_allocation}
 # ══════════════════════════════════════════════════════════════════════════════
 
 strategy_agent = LlmAgent(
@@ -289,14 +378,14 @@ strategy_agent = LlmAgent(
         "```json\n{prefetched_allocation}\n```\n\n"
         "Write a structured **Investment Strategy Report** covering:\n"
         "1. Asset allocation table: stocks / bonds / cash / alternatives "
-        "(percentage + USD amount).\n"
+        "(percentage + USD amount based on the actual capital).\n"
         "2. Expected annual return range and max drawdown estimate.\n"
         "3. Rebalancing frequency and trigger conditions.\n"
         "4. Three specific trade ideas with rationale.\n\n"
         "Be concise and data-driven. Do NOT call any tools."
     ),
     tools=[],
-    output_key="investment_strategy",      # ← C4 : output_key
+    output_key="investment_strategy",           # ← C4
     before_agent_callback=before_agent_callback,
     before_model_callback=before_model_callback,
     after_model_callback=after_model_callback,
@@ -305,12 +394,9 @@ strategy_agent = LlmAgent(
 
 # ══════════════════════════════════════════════════════════════════════════════
 # AGENT 5 — DecisionAgent
-# Contrainte C4 : output_key + {market_analysis} {news_impact} {risk_assessment}
-# Contrainte C5 : AgentTool(strategy_agent) → invoque StrategyAgent comme outil
 # ══════════════════════════════════════════════════════════════════════════════
 
-# Instanciation de l'AgentTool — satisfait la contrainte C5 (AgentTool)
-strategy_tool = agent_tool.AgentTool(agent=strategy_agent)
+strategy_tool = agent_tool.AgentTool(agent=strategy_agent)  # ← C5
 
 decision_agent = LlmAgent(
     name="DecisionAgent",
@@ -326,13 +412,14 @@ decision_agent = LlmAgent(
         "1. Call the `StrategyAgent` tool to obtain the portfolio strategy.\n"
         "2. Write the **Final Investment Decision Report** containing:\n"
         "   a) Executive summary with recommended action: INVEST / HOLD / AVOID.\n"
-        "   b) Portfolio allocation table with % and USD amounts ($100,000 base).\n"
+        "   b) Portfolio allocation table with % and USD amounts "
+        "(use the actual capital from the strategy).\n"
         "   c) Top 3 investment picks: entry price, target, stop-loss, rationale.\n"
         "   d) Risk management rules (max loss per position, stop-loss trigger).\n"
         "   e) Three immediate action items for the next 48 hours.\n"
     ),
-    tools=[strategy_tool],                 # ← C5 : AgentTool
-    output_key="portfolio_decision",       # ← C4 : output_key
+    tools=[strategy_tool],                      # ← C5
+    output_key="portfolio_decision",            # ← C4
     before_agent_callback=before_agent_callback,
     before_model_callback=before_model_callback,
     after_model_callback=after_model_callback,
@@ -340,51 +427,44 @@ decision_agent = LlmAgent(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# WORKFLOW AGENT A — LoopAgent  (Contrainte C3)
-# Raffine la stratégie jusqu'à convergence (max 2 itérations ici).
-# Intégré dans le SequentialAgent pour satisfaire C3 avec 2 types distincts.
+# WORKFLOW A — LoopAgent  (C3)
 # ══════════════════════════════════════════════════════════════════════════════
 
 strategy_refinement_loop = LoopAgent(
     name="StrategyRefinementLoop",
     description="Raffine la stratégie d'investissement sur plusieurs itérations.",
     sub_agents=[strategy_agent],
-    max_iterations=2,                      # ← LoopAgent actif et connecté
+    max_iterations=2,
 )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# WORKFLOW AGENT B — SequentialAgent  (Contrainte C3)
-# Pipeline principal : analyse marché → news → risque → stratégie (loop) → décision
+# WORKFLOW B — SequentialAgent  (C3)
+# Pipeline : Intent → Market → News → Risk → Strategy(loop) → Decision
 # ══════════════════════════════════════════════════════════════════════════════
 
 analysis_pipeline = SequentialAgent(
     name="AnalysisPipeline",
     description=(
         "Pipeline séquentiel complet : "
-        "MarketAnalysis → News → Risk → StrategyRefinementLoop → Decision."
+        "Intent → MarketAnalysis → News → Risk → StrategyRefinementLoop → Decision."
     ),
     sub_agents=[
+        intent_agent,                           # 🆕 Premier — extrait les paramètres
         market_analysis_agent,
         news_agent,
         risk_analysis_agent,
-        strategy_refinement_loop,          # ← LoopAgent intégré ici
+        strategy_refinement_loop,
         decision_agent,
     ],
 )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ROOT AGENT — InvestmentAdvisor
-# Contrainte C5 : transfer_to_agent → délègue à AnalysisPipeline
+# ROOT AGENT — InvestmentAdvisor  (C5 transfer_to_agent, C8)
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _root_before_agent(callback_context: CallbackContext) -> Optional[object]:
-    """
-    Initialise le state racine avant toute exécution.
-    Sauvegarde le message utilisateur pour que before_agent_callback
-    puisse extraire les symboles demandés.
-    """
     name  = callback_context.agent_name
     state = callback_context.state
     _log_start(name, state)
@@ -399,12 +479,13 @@ root_agent = LlmAgent(
     description="Point d'entrée de la plateforme d'investissement.",
     instruction=(
         "You are the front desk of an AI-powered investment platform.\n\n"
-        "- If the user asks about investments, portfolios, stocks, or crypto: "
-        "transfer the conversation to **AnalysisPipeline** using transfer_to_agent.\n"
+        "- If the user asks about investments, portfolios, stocks, crypto, "
+        "or any financial topic: transfer the conversation to **AnalysisPipeline** "
+        "using transfer_to_agent.\n"
         "- For simple greetings or off-topic questions: answer directly.\n\n"
         "Do not perform any analysis yourself — delegate to AnalysisPipeline."
     ),
-    sub_agents=[analysis_pipeline],        # ← C5 : transfer_to_agent activé
+    sub_agents=[analysis_pipeline],             # ← C5
     before_agent_callback=_root_before_agent,
     before_model_callback=before_model_callback,
     after_model_callback=after_model_callback,
