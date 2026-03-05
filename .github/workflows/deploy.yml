@@ -110,7 +110,7 @@ jobs:
 
       - name: Smoke test — Health check
         run: |
-          sleep 5
+          sleep 15
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ steps.get-url.outputs.url }}/health)
           if [ "$STATUS" != "200" ]; then
             echo "❌ Health check échoué (HTTP $STATUS)"
@@ -120,6 +120,7 @@ jobs:
 
       - name: Smoke test — Endpoint /symbols
         run: |
+          sleep 10
           curl -s ${{ steps.get-url.outputs.url }}/symbols | python3 -c "
           import sys, json
           data = json.load(sys.stdin)
