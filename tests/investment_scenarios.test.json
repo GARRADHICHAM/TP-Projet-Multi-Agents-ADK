@@ -1,0 +1,32 @@
+[
+  {
+    "query": "Analyse AAPL, NVDA et BTC pour un portefeuille de $100,000.",
+    "expected_topics": ["market", "risk", "portfolio", "allocation"],
+    "min_response_length": 200,
+    "description": "Full pipeline test - 3 assets, standard capital"
+  },
+  {
+    "query": "Quelles sont les meilleures actions tech pour investir à long terme ?",
+    "expected_topics": ["long_term", "strategy", "growth"],
+    "min_response_length": 150,
+    "description": "Long-term strategy focus test"
+  },
+  {
+    "query": "Le marché est-il risqué en ce moment ? Donne-moi une analyse.",
+    "expected_topics": ["risk", "VIX", "sentiment"],
+    "min_response_length": 100,
+    "description": "Risk-focused query test"
+  },
+  {
+    "query": "Analyse ETH et SOL pour du court terme avec $20,000.",
+    "expected_topics": ["crypto", "short_term", "entry", "stop"],
+    "min_response_length": 150,
+    "description": "Crypto short-term test with smaller capital"
+  },
+  {
+    "query": "Qu'est-ce que le RSI ?",
+    "expected_topics": ["RSI", "indicator", "overbought"],
+    "min_response_length": 50,
+    "description": "Simple question - should NOT trigger full pipeline"
+  }
+]
