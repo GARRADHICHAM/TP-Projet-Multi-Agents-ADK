@@ -1,0 +1,60 @@
+{
+  "eval_set_result_id": "investment_agent_evalsetf20c95_1772797838.113631",
+  "eval_set_result_name": "investment_agent_evalsetf20c95_1772797838.113631",
+  "eval_set_id": "evalsetf20c95",
+  "eval_case_results": [
+    {
+      "eval_set_file": "evalsetf20c95",
+      "eval_set_id": "evalsetf20c95",
+      "eval_id": "caseeb1bf3",
+      "final_eval_status": 3,
+      "eval_metric_results": null,
+      "overall_eval_metric_results": [
+        {
+          "metric_name": "tool_trajectory_avg_score",
+          "threshold": 0.8,
+          "criterion": null,
+          "custom_function_path": null,
+          "score": null,
+          "eval_status": 3,
+          "details": {
+            "rubric_scores": null
+          }
+        },
+        {
+          "metric_name": "response_match_score",
+          "threshold": 0.6,
+          "criterion": null,
+          "custom_function_path": null,
+          "score": null,
+          "eval_status": 3,
+          "details": {
+            "rubric_scores": null
+          }
+        }
+      ],
+      "eval_metric_result_per_invocation": [],
+      "session_id": "___eval___session___af66d56a-86f4-443d-9873-b9538532f394",
+      "session_details": {
+        "id": "___eval___session___af66d56a-86f4-443d-9873-b9538532f394",
+        "app_name": "investment_agent",
+        "user_id": "user",
+        "state": {
+          "user_message": "",
+          "prefetched_market": "",
+          "prefetched_news": "",
+          "prefetched_macro": "",
+          "prefetched_risk": "",
+          "prefetched_allocation": "",
+          "market_analysis": "",
+          "news_impact": "",
+          "risk_assessment": ""
+        },
+        "events": [],
+        "last_update_time": 1772797838.110467
+      },
+      "user_id": "user"
+    }
+  ],
+  "creation_timestamp": 1772797838.113631
+}

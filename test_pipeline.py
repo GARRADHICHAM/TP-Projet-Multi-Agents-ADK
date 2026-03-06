@@ -8,6 +8,7 @@ Usage:
 
 import asyncio
 import json
+import re
 import sys
 import os
 from pathlib import Path
@@ -67,6 +68,28 @@ def warn(msg):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# HELPER — parse JSON robustement (nettoie backticks markdown)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _parse_json(raw: str) -> dict:
+    """Nettoie et parse un JSON potentiellement entouré de backticks markdown."""
+    if not raw:
+        return {}
+    try:
+        clean = raw.strip()
+        clean = re.sub(r'^```json\s*', '', clean, flags=re.MULTILINE)
+        clean = re.sub(r'^```\s*',     '', clean, flags=re.MULTILINE)
+        clean = re.sub(r'\s*```$',     '', clean, flags=re.MULTILINE)
+        # Extraire le premier objet JSON si du texte parasite précède
+        match = re.search(r'\{.*\}', clean, re.DOTALL)
+        if match:
+            clean = match.group(0)
+        return json.loads(clean)
+    except (json.JSONDecodeError, AttributeError):
+        return {}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # UNIT TESTS — Tools work independently
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -118,10 +141,10 @@ def test_tools():
     # calculate_portfolio_allocation
     for profile in ["CONSERVATIVE", "MODERATE", "AGGRESSIVE"]:
         try:
-            r = calculate_portfolio_allocation(profile, "BALANCED", 100000)
+            r = calculate_portfolio_allocation(profile, "BALANCED", 100_000)
             total = sum(v["percentage_pct"] for v in r["allocations"].values())
             assert abs(total - 100) < 0.1, f"Allocations don't sum to 100%: {total}"
-            assert r["total_capital_usd"] == 100000
+            assert r["total_capital_usd"] == 100_000
             ok(f"calculate_portfolio_allocation('{profile}') → total={total}%, return={r['expected_annual_return']}")
         except Exception as e:
             fail(f"calculate_portfolio_allocation({profile}): {e}")
@@ -170,8 +193,6 @@ async def test_pipeline(query: str, expected_symbols: list[str]):
         user_id="test_user",
     )
 
-    # Store user message in state for symbol detection
-    # (ADK also stores it via invocation context but this is the fallback)
     session.state["user_message"] = query.upper()
 
     message = types.Content(role="user", parts=[types.Part(text=query)])
@@ -193,7 +214,6 @@ async def test_pipeline(query: str, expected_symbols: list[str]):
         fail(f"Pipeline crashed: {e}")
         return None
 
-    # Re-fetch session to inspect state
     final_session = await session_service.get_session(
         app_name=APP_NAME,
         user_id="test_user",
@@ -207,14 +227,14 @@ async def test_pipeline(query: str, expected_symbols: list[str]):
 def check_pipeline_results(response_text, state, events_seen, expected_symbols):
     """Validate pipeline outputs."""
 
-    # Check agents ran
+    # ── Agents executés ────────────────────────────────────────────────────────
     agents_run = state.get("agents_executed", 0)
     if agents_run >= 4:
         ok(f"{agents_run} agents executed")
     else:
         fail(f"Only {agents_run} agents ran (expected ≥ 4)")
 
-    # Check state keys populated
+    # ── State keys peuplés ─────────────────────────────────────────────────────
     for key in ["market_analysis", "news_impact", "risk_assessment", "portfolio_decision"]:
         val = state.get(key, "")
         if val and len(str(val)) > 50:
@@ -222,40 +242,82 @@ def check_pipeline_results(response_text, state, events_seen, expected_symbols):
         else:
             fail(f"state['{key}'] missing or too short: '{str(val)[:50]}'")
 
-    # Check prefetched data
+    # ── Données pré-chargées (JSON valide) ─────────────────────────────────────
     for key in ["prefetched_market", "prefetched_news", "prefetched_risk", "prefetched_allocation"]:
         val = state.get(key, "")
         if val:
             try:
-                parsed = json.loads(val)
+                json.loads(val)
                 ok(f"state['{key}'] is valid JSON")
             except Exception:
                 warn(f"state['{key}'] is not valid JSON")
         else:
             fail(f"state['{key}'] missing — tool was not called in callback")
 
-    # Check symbols were detected
-    detected = state.get("requested_symbols", [])
+    # ── FIX : Symboles détectés via intent_data ────────────────────────────────
+    detected = []
+
+    # Source 1 : lire intent_data directement dans le state (source principale)
+    intent_raw = state.get("intent_data", "")
+    if intent_raw:
+        data = _parse_json(intent_raw)
+        detected = data.get("requested_symbols", [])
+
+    # Source 2 : fallback — chercher dans l'audit trail si intent_data absent
+    if not detected:
+        for entry in state.get("audit_trail", []):
+            entry_str = str(entry)
+            if "requested_symbols" in entry_str:
+                data = _parse_json(entry_str)
+                if not data:
+                    # Tenter d'extraire le JSON embarqué dans la string d'audit
+                    match = re.search(r'\{.*"requested_symbols".*\}', entry_str, re.DOTALL)
+                    if match:
+                        data = _parse_json(match.group(0))
+                detected = data.get("requested_symbols", [])
+                if detected:
+                    break
+
+    # Vérification
     if detected:
-        ok(f"Symbols detected: {detected}")
+        ok(f"Symbols detected from IntentAgent: {detected}")
         for sym in expected_symbols:
             if sym in detected:
                 ok(f"  → '{sym}' correctly identified")
             else:
                 warn(f"  → '{sym}' not detected (found: {detected})")
     else:
-        fail("No symbols detected in state")
+        fail("No symbols detected in state['intent_data'] or audit trail")
 
-    # Check audit trail
+    # ── Capital détecté ────────────────────────────────────────────────────────
+    intent_raw = state.get("intent_data", "")
+    if intent_raw:
+        data = _parse_json(intent_raw)
+        capital = data.get("user_capital")
+        if capital:
+            ok(f"Capital detected: ${capital:,.0f}")
+        else:
+            warn("Capital not found in intent_data")
+
+    # ── Risk profile détecté ───────────────────────────────────────────────────
+    if intent_raw:
+        data = _parse_json(intent_raw)
+        profile = data.get("risk_profile")
+        if profile in ("CONSERVATIVE", "MODERATE", "AGGRESSIVE"):
+            ok(f"Risk profile detected: {profile}")
+        else:
+            warn(f"Risk profile unexpected: {profile}")
+
+    # ── Audit trail ────────────────────────────────────────────────────────────
     trail = state.get("audit_trail", [])
     if len(trail) >= 3:
         ok(f"Audit trail has {len(trail)} entries")
         for entry in trail:
-            print(f"     {BLUE}•{RESET} {entry}")
+            print(f"     {BLUE}•{RESET} {str(entry)[:120]}")
     else:
         warn(f"Audit trail short: {trail}")
 
-    # Check final response
+    # ── Réponse finale ─────────────────────────────────────────────────────────
     if response_text and len(response_text) > 100:
         ok(f"Final response received ({len(response_text)} chars)")
         print(f"\n  {BOLD}Preview:{RESET}")
@@ -273,17 +335,17 @@ async def run_all():
     print("  TESTS — Plateforme d'investissement ADK")
     print(f"{'═'*60}{RESET}")
 
-    # Test 1 — Tools
+    # Test 1 — Tools unitaires
     test_tools()
 
-    # Test 2 — Full pipeline
+    # Test 2 — Pipeline complet
     query = "Analyse AAPL, NVDA et BTC pour un portefeuille de $100,000."
     result = await test_pipeline(query, ["AAPL", "NVDA", "BTC"])
     if result:
         response_text, state, events = result
         check_pipeline_results(response_text, state, events, ["AAPL", "NVDA", "BTC"])
 
-    # Summary
+    # Résumé
     print(f"\n{BOLD}{'═'*60}")
     total = passed + failed
     if failed == 0:

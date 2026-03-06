@@ -1,6 +1,5 @@
 investment_agent/.env
 .env
-.env
 *.env
 .env.*
 node_modules/

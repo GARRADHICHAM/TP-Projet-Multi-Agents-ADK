@@ -1,612 +1,589 @@
 # 📈 Plateforme d'Investissement Automatisée — ADK Multi-Agents
 
-> Système multi-agents Google ADK pour l'analyse financière et l'allocation de portefeuille automatisée avec LLMs modernes (Gemini 2.5 Flash Lite).
+> Système multi-agents Google ADK pour l'analyse financière et l'allocation de portefeuille automatisée avec Gemini 2.5 Flash Lite — déployé sur Google Cloud Run avec un frontend Next.js.
 
-**Version actuelle** : v2.0 (Architecture ADK complète)  
-**Modèle LLM** : `gemini-2.5-flash-lite`  
-**Framework** : Google ADK (Agentic Development Kit)
+**Version actuelle** : v3.0 (Architecture ADK complète + Déploiement Cloud + Frontend Web)  
+**Modèle LLM (production)** : `gemini-2.5-flash-lite`  
+**Framework** : Google ADK (Agentic Development Kit)  
+**API** : https://investment-agent-449502745670.europe-west1.run.app  
+**Frontend** : Déployé sur Vercel.   
+**réalisée par : HICHAM GARRAD**
+
+## **🌐 Lien de la platform** : https://investment-platform-mu.vercel.app/
+
+> ⚠️ **Note importante** : Les données financières utilisées dans ce projet sont des **données simulées (mock data)** générées aléatoirement à des fins de démonstration. Les prix, indicateurs techniques, sentiments de news et données macro sont tous synthétiques. En perspective, l'objectif est de remplacer ces mocks par de **vraies APIs financières** (Yahoo Finance, Alpha Vantage, NewsAPI, FRED, etc.).
 
 ---
 
 ## 📋 Table des matières
 
 1. [Description du projet](#description-du-projet)
-2. [Architecture multi-agents](#architecture-multi-agents)
-3. [Étapes de réalisation et défis](#étapes-de-réalisation-et-défis)
-4. [Installation](#installation)
-5. [Lancement](#lancement)
-6. [Exemples de requêtes](#exemples-de-requêtes)
-7. [Structure du projet](#structure-du-projet)
-8. [Contraintes techniques satisfaites](#contraintes-techniques-satisfaites)
+2. [Données simulées et perspectives](#données-simulées-et-perspectives)
+3. [Architecture multi-agents](#architecture-multi-agents)
+4. [Comparaison des modèles LLM](#comparaison-des-modèles-llm)
+5. [Déploiement Cloud](#déploiement-cloud)
+6. [Frontend Next.js](#frontend-nextjs)
+7. [Étapes de réalisation et défis](#étapes-de-réalisation-et-défis)
+8. [Installation locale](#installation-locale)
+9. [Lancement](#lancement)
+10. [Exemples de requêtes](#exemples-de-requêtes)
+11. [Structure du projet](#structure-du-projet)
+12. [Contraintes techniques satisfaites](#contraintes-techniques-satisfaites)
+13. [Perspectives](#perspectives)
 
 ---
 
-## 🎯 Description du projet
+## 🎯 Description du projet {#description-du-projet}
 
 ### Objectif principal
 
-Implémentation d'une **plateforme d'investissement automatisée** utilisant le framework Google ADK pour orchestrer **5 agents LLM spécialisés** qui analysent les marchés financiers de manière collaborative et produisent des recommandations d'allocation de portefeuille complètes, structurées et justifiées.
+Implémentation d'une **plateforme d'investissement automatisée** utilisant le framework Google ADK pour orchestrer **6 agents LLM spécialisés** qui analysent les marchés financiers de manière collaborative et produisent des recommandations d'allocation de portefeuille complètes, structurées et justifiées.
+
+La plateforme est entièrement déployée sur **Google Cloud Run** et consommable via une **interface web Next.js** avec chatbot IA intégré.
 
 ### Fonctionnalités clés
 
+- ✅ **Extraction d'intention dynamique** : IntentAgent extrait symboles, capital, profil de risque et stratégie depuis le message utilisateur
 - ✅ **Analyse multi-dimensionnelle** : Marché, actualités, risques, stratégie
-- ✅ **Agents spécialisés** : Chacun expert dans son domaine (analyste marché, analyste news, responsable risque, gestionnaire portefeuille, CIO)
+- ✅ **Agents spécialisés** : Analyste marché, analyste news, responsable risque, gestionnaire portefeuille, CIO
 - ✅ **Orchestration complexe** : Séquençage, boucles, délégations (transfer_to_agent + AgentTool)
 - ✅ **Pré-fetch de données** : Tools appelés en Python pur via callbacks (zéro hallucination LLM)
-- ✅ **Rapports structurés** : Format JSON, tableaux d'allocation, ratios de risque, plans d'action
+- ✅ **API REST** : FastAPI wrapper exposant le pipeline comme API REST
+- ✅ **CI/CD automatique** : GitHub Actions → Cloud Run à chaque push
+- ✅ **Interface web** : Dashboard, chatbot, historique des analyses
 
 ### Cas d'usage
 
 ```
-Utilisateur : "Analyse AAPL, NVDA et BTC pour 100 000$ en profil modéré"
+Utilisateur : "Stratégie MODERATE sur $50,000 avec GOOGL et AMZN"
   ↓
-Plateforme :
-  1. Récupère prix, tendances techniques (RSI, MACD)
-  2. Analyse sentiment news et indicateurs macro
-  3. Évalue score de risque et volatilité
-  4. Calcule allocation optimale (stocks/bonds/cash)
-  5. Produit rapport final avec top 3 picks, stops, action items
+IntentAgent  : extrait { symboles: [GOOGL, AMZN], capital: 50000, profil: MODERATE }
+  ↓
+MarketAgent  : analyse prix, RSI, MACD pour GOOGL et AMZN (données simulées)
+  ↓
+NewsAgent    : sentiment news + indicateurs macro (données simulées)
+  ↓
+RiskAgent    : score de risque + recommandations
+  ↓
+StrategyLoop : allocation optimale sur $50,000
+  ↓
+DecisionAgent: rapport final avec top 3 picks, stops, action items (48h)
 ```
 
 ---
 
-## 🏗️ Architecture multi-agents
+## 📊 Données simulées et perspectives {#données-simulées-et-perspectives}
 
-### Schéma global
+### Situation actuelle — Mock Data
+
+Toutes les données financières sont **simulées en Python** avec `random` pour des raisons de démonstration et d'indépendance vis-à-vis des APIs externes.
+
+| Tool                               | Données simulées              | Comportement                                        |
+| ---------------------------------- | ----------------------------- | --------------------------------------------------- |
+| `get_market_data()`                | Prix, volume, market cap      | Prix de base ±3% aléatoire                          |
+| `get_technical_indicators()`       | RSI, MACD, ADX, MA, Bollinger | Valeurs aléatoires dans plages réalistes            |
+| `get_news_sentiment()`             | Headlines, score sentiment    | Templates avec 40% positif, 30% négatif, 30% neutre |
+| `get_economic_indicators()`        | VIX, inflation, GDP, Fed Rate | Ranges réalistes simulés                            |
+| `calculate_portfolio_allocation()` | Allocation stocks/bonds/cash  | Table de lookup fixe par profil                     |
+| `assess_risk_score()`              | Score 0-100, recommandations  | Formule mathématique déterministe                   |
+
+**Exemple de mock data** :
+
+```python
+# market_tools.py — prix de base hardcodés
+_BASE_PRICES = {
+    "AAPL": 189.50, "NVDA": 875.30, "BTC": 67500.0, ...
+}
+# Variation aléatoire ±3% à chaque appel
+price = round(base * random.uniform(0.97, 1.03), 2)
+```
+
+### Perspectives — Vraies APIs financières
+
+L'architecture des tools est conçue pour être facilement remplaçable. Voici les APIs qui seront intégrées :
+
+| Tool actuel (mock)           | API réelle prévue          | Données                                          |
+| ---------------------------- | -------------------------- | ------------------------------------------------ |
+| `get_market_data()`          | Yahoo Finance (`yfinance`) | Prix temps réel, volume, market cap              |
+| `get_technical_indicators()` | Alpha Vantage, Polygon.io  | RSI, MACD, Bollinger calculés sur vraies données |
+| `get_news_sentiment()`       | NewsAPI, Refinitiv         | Vraies headlines + NLP sentiment                 |
+| `get_economic_indicators()`  | FRED API, World Bank       | Inflation, GDP, taux réels                       |
+
+**Migration prévue** — aucun changement dans `agent.py` requis, seulement dans `tools/` :
+
+```python
+# Avant (mock)
+def get_market_data(symbol):
+    return {"price": random.uniform(100, 500), ...}
+
+# Après (vraie API)
+def get_market_data(symbol):
+    import yfinance as yf
+    ticker = yf.Ticker(symbol)
+    return ticker.info
+```
+
+---
+
+## 🏗️ Architecture multi-agents {#architecture-multi-agents}
+
+### Schéma global (v3 — Actuelle)
 
 ```mermaid
 graph TD
     User(["👤 Utilisateur"])
-    User -->|"Requête (symboles, montant, profil)"| Root
+    User -->|"Requête naturelle"| Root
 
-    subgraph ROOT["🌍 Couche d'entrée"]
-        Root["📍 InvestmentAdvisor<br/>(LlmAgent)<br/>transfer_to_agent →"]
+    subgraph ROOT["🌍 Couche d entrée"]
+        Root["📍 InvestmentAdvisor<br/>LlmAgent<br/>transfer_to_agent"]
     end
 
     Root -->|"transfer_to_agent"| Pipeline
 
-    subgraph SEQ["📊 Pipeline d'analyse (SequentialAgent)"]
+    subgraph SEQ["📊 AnalysisPipeline - SequentialAgent"]
         direction TB
+        I["IntentAgent<br/>Extrait symboles, capital<br/>risk_profile, strategy"]
+        M["MarketAnalysisAgent<br/>output: market_analysis"]
+        N["NewsAgent<br/>output: news_impact"]
+        R["RiskAnalysisAgent<br/>output: risk_assessment"]
 
-        M["MarketAnalysisAgent<br/>(LlmAgent)<br/>✅ output_key<br/>✅ {prefetched_market}"]
-        N["NewsAgent<br/>(LlmAgent)<br/>✅ output_key<br/>✅ {prefetched_news}"]
-        R["RiskAnalysisAgent<br/>(LlmAgent)<br/>✅ output_key<br/>✅ {prefetched_risk}"]
-
-        subgraph LOOP["🔄 Boucle de raffinement (LoopAgent)"]
-            S["StrategyAgent<br/>(LlmAgent)<br/>max_iterations=2"]
+        subgraph LOOP["🔄 StrategyRefinementLoop - LoopAgent"]
+            S["StrategyAgent<br/>output: investment_strategy"]
         end
 
-        D["DecisionAgent<br/>(LlmAgent)<br/>✅ AgentTool<br/>→ StrategyAgent<br/>✅ output_key"]
+        D["DecisionAgent<br/>AgentTool - StrategyAgent<br/>output: portfolio_decision"]
     end
 
+    I --> M
     M --> N
     N --> R
     R --> LOOP
     LOOP --> D
     D -->|"Final Report"| User
 
-    subgraph TOOLS["🔧 6 Tools Python (before_agent_callback)"]
-        T1["get_market_data()"]
-        T2["get_technical_indicators()"]
-        T3["get_news_sentiment()"]
-        T4["get_economic_indicators()"]
-        T5["calculate_portfolio_allocation()"]
-        T6["assess_risk_score()"]
+    subgraph TOOLS["🔧 6 Tools Python - before_agent_callback - Mock Data"]
+        T1["get_market_data"]
+        T2["get_technical_indicators"]
+        T3["get_news_sentiment"]
+        T4["get_economic_indicators"]
+        T5["calculate_portfolio_allocation"]
+        T6["assess_risk_score"]
     end
 
-    M -.->|"Pré-fetch"| T1
-    M -.->|"Pré-fetch"| T2
-    N -.->|"Pré-fetch"| T3
-    N -.->|"Pré-fetch"| T4
-    R -.->|"Pré-fetch"| T6
-    S -.->|"Pré-fetch"| T5
-
-    style ROOT fill:#1a1a2e,stroke:#e94560,color:#fff
-    style SEQ fill:#16213e,stroke:#0f3460,color:#fff
-    style LOOP fill:#0f3460,stroke:#e94560,color:#fff
-    style TOOLS fill:#2d5016,stroke:#7cb342,color:#fff
-    style Root fill:#e94560,stroke:#fff,color:#fff
-    style M fill:#0d7377,stroke:#fff,color:#fff
-    style N fill:#0d7377,stroke:#fff,color:#fff
-    style R fill:#f5a623,stroke:#fff,color:#000
-    style LOOP fill:#7b2d8b,stroke:#fff,color:#fff
-    style D fill:#c41e3a,stroke:#fff,color:#fff
+    M -.-> T1
+    M -.-> T2
+    N -.-> T3
+    N -.-> T4
+    R -.-> T6
+    S -.-> T5
 ```
 
-### Flux de données détaillé
+### Amélioration clé : IntentAgent
+
+Le `IntentAgent` est le **premier agent du pipeline**. Il utilise le LLM pour extraire dynamiquement tous les paramètres depuis le message utilisateur :
+
+```json
+// Input: "Stratégie MODERATE sur $50,000 avec GOOGL et AMZN"
+// Output (intent_data):
+{
+  "requested_symbols": ["GOOGL", "AMZN"],
+  "user_capital": 50000,
+  "risk_profile": "MODERATE",
+  "investment_strategy_type": "BALANCED"
+}
+```
+
+Tous les agents suivants lisent ces valeurs dynamiquement depuis le state — **aucune valeur hardcodée**.
+
+---
+
+## 🤖 Comparaison des modèles LLM {#comparaison-des-modèles-llm}
+
+Un des objectifs du projet était de tester la **même architecture finale** avec différents modèles pour illustrer l'importance du choix du LLM dans un système multi-agents complexe.
+
+### Méthodologie de test
+
+La même architecture (6 agents, 3 callbacks, SequentialAgent + LoopAgent + AgentTool) a été testée avec :
+
+- Des modèles locaux via **Ollama** (zéro coût, confidentialité)
+- L'API cloud **Google Gemini** (production)
+
+### Résultats — Erreurs réelles observées
+
+#### ❌ llama3.2:3b (Ollama local)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ 1. USER REQUEST (main.py)                                   │
-│    "Analyse AAPL, NVDA, BTC pour 100k$"                     │
-└────────────────────┬────────────────────────────────────────┘
-                     ↓
-┌─────────────────────────────────────────────────────────────┐
-│ 2. INVESTMENT ADVISOR (root_agent)                          │
-│    • before_agent_callback : Sauvegarde user_message        │
-│    • Exécution LLM : Détecte "investissement" → transfer    │
-│    • after_model_callback : Log audit trail                 │
-└────────────────────┬────────────────────────────────────────┘
-                     ↓
-┌─────────────────────────────────────────────────────────────┐
-│ 3. ANALYSIS PIPELINE (SequentialAgent)                      │
-│    └─ Exécute séquentiellement : M → N → R → LOOP → D      │
-└────────────────────┬────────────────────────────────────────┘
-                     ↓
-    ┌────────────────┬────────────────┬────────────────┐
-    ↓                ↓                ↓                ↓
-┌─────────┐      ┌─────────┐      ┌─────────┐      ┌──────────┐
-│ MARKET  │      │ NEWS    │      │ RISK    │      │ STRATEGY │
-│ Agent   │      │ Agent   │      │ Agent   │      │ Loop     │
-│         │      │         │      │         │      │ (max 2×) │
-│ Before: │      │ Before: │      │ Before: │      │          │
-│ • fetch │      │ • fetch │      │ • fetch │      │ Before:  │
-│   market│      │   news  │      │ risk    │      │ • fetch  │
-│ • fetch │      │ • fetch │      │   score │      │  alloc   │
-│   tech  │      │   macro │      │         │      │          │
-│         │      │         │      │         │      │          │
-│ Output: │      │ Output: │      │ Output: │      │ Output:  │
-│ {mkt}   │      │ {news}  │      │ {risk}  │      │ {strat}  │
-└────┬────┘      └────┬────┘      └────┬────┘      └────┬─────┘
-     │                │                │                │
-     └────────────────┴────────────────┴────────────────┘
-                     ↓
-         ┌──────────────────────────┐
-         │ DECISION AGENT           │
-         │                          │
-         │ Input:                   │
-         │ • {market_analysis}      │
-         │ • {news_impact}          │
-         │ • {risk_assessment}      │
-         │                          │
-         │ Call: AgentTool          │
-         │ → StrategyAgent          │
-         │   → {investment_strategy}│
-         │                          │
-         │ Output:                  │
-         │ {portfolio_decision}     │
-         │ (rapport final complet)  │
-         └──────────────┬───────────┘
-                        ↓
-         ┌──────────────────────────┐
-         │ 4. FINAL REPORT (user)   │
-         │                          │
-         │ • Executive summary      │
-         │ • Allocation table       │
-         │ • Top 3 picks            │
-         │ • Risk rules             │
-         │ • Action items (48h)     │
-         └──────────────────────────┘
+ValueError: Tool 'answer' not found.
+Available tools: transfer_to_agent
+```
+
+Le modèle hallucine un tool `answer` pour répondre à un simple "hi" au lieu de répondre en texte direct. Il ne comprend pas qu'il peut répondre sans appeler de tool.
+
+```
+ValueError: Tool 'FinalInvestmentDecisionReport' not found.
+Available tools: StrategyAgent
+```
+
+Quand le `DecisionAgent` doit produire le rapport final, le modèle invente un tool du nom du rapport au lieu d'écrire le texte directement.
+
+**Autres problèmes** :
+
+- Mac Air 8 GB RAM : gel système lors du chargement du modèle
+- Temps de réponse : 30-60s par agent (vs 3-5s avec Gemini)
+- JSON mal formé par IntentAgent (backticks, texte parasite)
+
+#### ⚠️ mistral:7b (Ollama local)
+
+```
+ValueError: Tool 'FinalInvestmentDecisionReport' not found.
+Available tools: StrategyAgent
+```
+
+Même hallucination de noms de tools. Mistral 7B ne distingue pas clairement "écrire un rapport" de "appeler un tool nommé rapport".
+
+**Autres problèmes** :
+
+- Lent sur Mac 8 GB (swap intensif)
+- Nécessite des instructions très courtes et directives
+- JSON de IntentAgent souvent entouré de texte parasite
+
+#### ✅ gemini-2.5-flash-lite (API Google)
+
+- Zéro hallucination de noms de tools
+- JSON propre depuis IntentAgent (parfois avec backticks → résolu par `_clean_json()`)
+- Pipeline complet en 30-60 secondes
+- Rapports structurés et cohérents
+- Gestion correcte de `transfer_to_agent` et `AgentTool`
+
+### Tableau comparatif complet
+
+| Modèle                  | Type         | RAM requise | Function Calling | Hallucinations tools       | Qualité rapports | Verdict       |
+| ----------------------- | ------------ | ----------- | ---------------- | -------------------------- | ---------------- | ------------- |
+| `gemma2:2b`             | Local Ollama | 4 GB        | ❌ Très faible   | 🔴 Massives                | ⭐               | ❌ Rejeté     |
+| `llama3.2:3b`           | Local Ollama | 4 GB        | ❌ Faible        | 🔴 `answer`, noms de tools | ⭐               | ❌ Rejeté     |
+| `mistral:7b`            | Local Ollama | 8 GB        | ⚠️ Moyen         | 🟡 Noms de tools           | ⭐⭐             | ⚠️ Instable   |
+| `llama2:13b`            | Local Ollama | 16 GB       | ✅ Bon           | 🟡 Modérées                | ⭐⭐⭐           | ⚠️ Lent       |
+| `gemini-2.5-flash-lite` | Cloud Google | 0 (API)     | ✅✅ Excellent   | 🟢 Quasi-nulles            | ⭐⭐⭐⭐⭐       | ✅ **Retenu** |
+
+### Conclusion
+
+> **Les modèles locaux < 7B sont insuffisants pour les architectures multi-agents complexes.** Ils ne maîtrisent pas le function calling et hallucinent systématiquement les noms de tools, rendant le pipeline instable. Les APIs cloud (Gemini, GPT-4o) restent indispensables pour la production, offrant une qualité et une fiabilité incomparables pour ce type d'orchestration.
+
+Les erreurs observées avec les petits modèles constituent en elles-mêmes une démonstration pédagogique des limitations actuelles des LLMs locaux pour les systèmes multi-agents.
+
+---
+
+## ☁️ Déploiement Cloud {#déploiement-cloud}
+
+### Infrastructure
+
+```
+GitHub (push main)
+      ↓
+GitHub Actions (CI/CD)
+      ├── Tests Python (test_tools)
+      ├── Build Docker image
+      ├── Push → Artifact Registry (europe-west1)
+      └── Deploy → Cloud Run
+                  ↓
+         investment-agent-449502745670.europe-west1.run.app
+                  ↑
+         GOOGLE_API_KEY (Secret Manager)
+```
+
+### Endpoints API disponibles
+
+| Endpoint     | Méthode | Description                        |
+| ------------ | ------- | ---------------------------------- |
+| `/health`    | GET     | Health check Cloud Run             |
+| `/analyze`   | POST    | Lancer le pipeline complet         |
+| `/symbols`   | GET     | Liste des symboles reconnus        |
+| `/scenarios` | GET     | Scénarios de test disponibles      |
+| `/docs`      | GET     | Documentation Swagger auto-générée |
+
+### Exemple d'appel API
+
+```bash
+curl -X POST https://investment-agent-449502745670.europe-west1.run.app/analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Stratégie MODERATE sur $50,000 avec GOOGL et AMZN",
+    "user_id": "user_001"
+  }'
+```
+
+### Réponse
+
+```json
+{
+  "session_id": "uuid",
+  "final_response": "Final Investment Decision Report...",
+  "outputs": {
+    "market_analysis": "...",
+    "news_impact": "...",
+    "risk_assessment": "...",
+    "investment_strategy": "...",
+    "portfolio_decision": "..."
+  },
+  "status": "success"
+}
+```
+
+### Configuration CI/CD (GitHub Secrets requis)
+
+| Secret                | Valeur                                |
+| --------------------- | ------------------------------------- |
+| `GCP_PROJECT_ID`      | `agents-project-489310`               |
+| `WIF_PROVIDER`        | Workload Identity Federation provider |
+| `WIF_SERVICE_ACCOUNT` | Service account GitHub Actions        |
+| `GOOGLE_API_KEY`      | Clé Gemini (Secret Manager)           |
+| `FRONTEND_URL`        | URL du frontend Vercel                |
+
+### Défis de déploiement rencontrés
+
+| Défi                           | Cause                                     | Solution                                                 |
+| ------------------------------ | ----------------------------------------- | -------------------------------------------------------- |
+| Clé API exposée sur GitHub     | `.env` commité par erreur                 | `git rm --cached`, nouvelle clé, Secret Manager          |
+| `Session not found`            | ADK sync/async mismatch                   | Fonction `_call()` détectant sync vs async               |
+| Symboles incorrects (AAPL/BTC) | LLM retourne JSON avec backticks markdown | Fonction `_clean_json()` nettoyant avant parse           |
+| Cloud Run permissions 403      | SA compute sans droits storage            | Ajout `roles/storage.admin` et `roles/logging.logWriter` |
+| Workload Identity condition    | Mauvais nom de repo GitHub                | Mise à jour `attribute-condition` avec bon nom           |
+
+---
+
+## 🌐 Frontend Next.js {#frontend-nextjs}
+
+### Pages disponibles
+
+| Page       | URL        | Description                             |
+| ---------- | ---------- | --------------------------------------- |
+| Dashboard  | `/`        | Aperçu marché, stats, analyses récentes |
+| Analyser   | `/analyze` | Chatbot IA avec rapports par agent      |
+| Historique | `/history` | Toutes les analyses passées             |
+
+### Fonctionnalités
+
+- 🌙 **Dark mode** par défaut (toggle clair/sombre)
+- 💬 **Chatbot** avec suggestions de requêtes
+- 📊 **Graphiques** sparkline par symbole (Recharts)
+- 📋 **Rapports accordéon** par agent (Market, News, Risk, Strategy, Decision)
+- 🔍 **Historique** avec recherche et détail complet
+- ⚡ **Indicateur** de statut API en temps réel
+
+### Stack technique
+
+- **Framework** : Next.js 14 (App Router)
+- **Styling** : Tailwind CSS + CSS Variables
+- **Charts** : Recharts
+- **Markdown** : react-markdown
+- **Fonts** : Syne (display) + DM Mono + DM Sans
+- **Deploy** : Vercel (CI/CD automatique via GitHub)
+
+### Variables d'environnement frontend
+
+```bash
+# .env.local
+NEXT_PUBLIC_API_URL=https://investment-agent-449502745670.europe-west1.run.app
 ```
 
 ---
 
-## 🚀 Étapes de réalisation et défis
+## 🚀 Étapes de réalisation et défis {#étapes-de-réalisation-et-défis}
 
-### 📍 Architecture v1 (Initial — Non stable)
+### 📍 Architecture v1 — Non stable (Modèles locaux)
 
-**Design** :
+| #   | Défi                   | Cause                                           | Impact               |
+| --- | ---------------------- | ----------------------------------------------- | -------------------- |
+| D1  | `Tool not found`       | Modèles 2B-3B hallucinent les noms d'agents     | Boucles infinies     |
+| D2  | Appels tools en boucle | LLM local ne sait pas quand arrêter             | RAM saturée, timeout |
+| D3  | Modèles trop limités   | 2B-3B paramètres insuffisants pour multi-agents | Zéro convergence     |
 
-```
-InvestmentAdvisor
-└─ AnalysisPipeline (Sequential)
-   ├─ DataGathering (Parallel)
-   │  ├─ MarketAnalysisAgent (tools: get_market_data, get_technical_indicators)
-   │  └─ NewsAgent (tools: get_news_sentiment, get_economic_indicators)
-   ├─ RiskAnalysisAgent (tools: assess_risk_score)
-   └─ DecisionAgent (AgentTool → StrategyAgent)
-```
+### 📍 Architecture v2 — Semi-stable
 
-**Problèmes rencontrés** :
-| # | Défi | Cause | Impact |
-|---|------|-------|--------|
-| **D1** | `Tool 'AnalysisPipeline' not found` | Modèle petit (2B-3B) hallucine les noms d'agents comme tools | Boucles infinies, crash |
-| **D2** | Appels de tools en boucle infinie | LLM local ne sait pas quand arrêter `tool_calls` | RAM saturée (>2GB), timeout |
-| **D3** | `gemma2:2b` trop limité | Seulement 2B paramètres, pas assez pour function calling multi-agents | Zéro convergence |
-| **D4** | `ollama/llama3.2` aussi instable | 3B paramètres, hallucinations persistantes | Même problèmes que D1-D3 |
+Suppression du `ParallelAgent` pour éviter les hallucinations de noms d'agents.
 
-**Modèles testés** :
+### 📍 Architecture v3 — Stable (Pré-fetch)
 
-- ❌ `ollama/gemma2:2b` — Hallucinations massives
-- ❌ `ollama/llama3.2` — Instable, hallucine les noms
-- ❌ `ollama/llama2:13b` — Lent, mêmes problèmes
-- ⚠️ `ollama/mistral:7b` — Slightly better, but still unreliable
+**Breakthrough** : Tools appelés en Python pur via `before_agent_callback`. Le LLM reçoit les données pré-chargées sans voir aucun nom de fonction.
 
----
+### 📍 Architecture v4 — Cloud (Gemini)
 
-### 📍 Architecture v2 (Transition — Semi-stable)
+Migration vers `gemini-2.5-flash-lite` → zéro hallucinations, rapports structurés.
 
-**Changements** :
+### 📍 Architecture v5 — Production complète
 
-```diff
-- ParallelAgent (DataGathering)
-+ SequentialAgent pur (MarketAnalysisAgent → NewsAgent → RiskAnalysisAgent)
-```
-
-**Solution au D1** : Suppression du `ParallelAgent` pour éviter que ses noms soient visibles en contexte LLM.
-
-**Problème résiduel** : Toujours des hallucinations avec `{variable}` dans les instructions.
+- Ajout `IntentAgent` pour extraction dynamique des paramètres
+- Wrapper FastAPI (`server.py`) exposant le pipeline comme API REST
+- Déploiement Google Cloud Run avec CI/CD GitHub Actions
+- Frontend Next.js avec chatbot et dashboard
+- Secret Manager pour la gestion des clés API
 
 ---
 
-### 📍 Architecture v3 (Pré-fetch — Stable localement)
-
-**Breakthrough** : **Suppression des tools des instructions LLM**
-
-**Stratégie** :
-
-1. Tools appelés **en Python pur** via `before_agent_callback`
-2. LLM reçoit données **pré-chargées** dans le state
-3. LLM rédige rapport sans voir aucun nom de fonction
-
-```python
-def before_agent_callback(callback_context):
-    # Appel Python pur (0 LLM call)
-    data = get_market_data(symbol)
-    state["prefetched_market"] = json.dumps(data)
-    return None
-```
-
-Instruction LLM (aucun tool, données directes) :
-
-```python
-"Here is the pre-fetched market data:\n{prefetched_market}\nWrite a report..."
-```
-
-**Résultat** :
-
-- ✅ Zéro hallucination de noms
-- ✅ Zéro boucles infinies
-- ✅ Converge rapidement avec llama3.2
-
-**Limitation** : Modèles locaux (3B-13B) sont juste suffisants.
-
----
-
-### 📍 Architecture v4 (Cloud APIs — Production)
-
-**Upgrade** : **Migration vers Google Gemini via ADK**
-
-**Motivations** :
-
-- Modèle plus puissant (`gemini-2.5-flash-lite`) → meilleure qualité
-- API cloud → scalabilité, fiabilité
-- ADK natif → meilleur support, better error handling
-- Pre-fetch strategy toujours valide
-
-**Résultat** :
-
-- ✅ Rapports plus structurés et cohérents
-- ✅ Meilleure handling des templates `{variable}`
-- ✅ Zéro hallucinations
-- ✅ Production-ready
-
----
-
-### 📍 Architecture v5 (Actuelle — Complète)
-
-**Ajouts** :
-
-- ✅ `LoopAgent` (StrategyRefinementLoop) pour raffinage itératif
-- ✅ `AgentTool` (DecisionAgent → StrategyAgent) pour délégation
-- ✅ `transfer_to_agent` (InvestmentAdvisor → AnalysisPipeline)
-- ✅ 3 callbacks complets (before_agent, before_model, after_model)
-- ✅ Gestion d'erreurs robuste
-- ✅ Audit trail complet en state
-
-**Satisfait 100% des contraintes ADK**.
-
----
-
-### 📊 Résumé des modèles testés
-
-| Modèle                  | Type           | Paramètres | Fonction Calling | Hallucinations | Verdict       |
-| ----------------------- | -------------- | ---------- | ---------------- | -------------- | ------------- |
-| `gemma2:2b`             | Local (Ollama) | 2B         | ❌ Faible        | 🔴 Massif      | ❌ Rejeté     |
-| `llama3.2`              | Local (Ollama) | 3B         | ⚠️ Moyen         | 🟡 Modéré      | ⚠️ Instable   |
-| `llama2:13b`            | Local (Ollama) | 13B        | ✅ Bon           | 🟡 Modéré      | ⚠️ Lent       |
-| `mistral:7b`            | Local (Ollama) | 7B         | ✅ Bon           | 🟡 Modéré      | ⚠️ Acceptable |
-| `gemini-2.5-flash-lite` | Cloud (Google) | ?          | ✅✅ Excellent   | 🟢 Zéro        | ✅ **Retenu** |
-| `gpt-4o`                | Cloud (OpenAI) | ?          | ✅✅ Excellent   | 🟢 Zéro        | ✅ Alternatif |
-
-**Conclusion** : Modèles cloud > modèles locaux pour multi-agents complexes.
-
----
-
-## 💾 Installation
+## 💾 Installation locale {#installation-locale}
 
 ### Prérequis
 
 - Python 3.10+
-- pip ou uv
-- Clé API Google Gemini (gratuit via [AI Studio](https://aistudio.google.com/app/apikey))
+- Node.js 18+ (pour le frontend)
+- Clé API Google Gemini ([AI Studio](https://aistudio.google.com/app/apikey))
 
-### Étapes
-
-#### 1. Cloner le repo
+### Backend (Agent ADK)
 
 ```bash
+# 1. Cloner le repo
 git clone https://github.com/GARRADHICHAM/TP-Projet-Multi-Agents-ADK.git
 cd TP-Projet-Multi-Agents-ADK
-```
 
-#### 2. Créer un environnement virtuel
-
-```bash
+# 2. Environnement virtuel
 python3 -m venv .venv
-source .venv/bin/activate  # macOS/Linux
-# ou
-.venv\Scripts\activate  # Windows
+source .venv/bin/activate
+
+# 3. Installer les dépendances
+pip install -r requirements.txt
+
+# 4. Configurer la clé API (NE PAS committer ce fichier !)
+echo "GOOGLE_API_KEY=votre_cle_ici" > investment_agent/.env
+
+# 5. Lancer le serveur API localement
+python server.py
+# → http://localhost:8080
 ```
 
-#### 3. Installer les dépendances
+### Frontend Next.js
 
 ```bash
-pip install -e ".[dev]"
-# ou manuellement :
-pip install google-adk google-genai pydantic pytest
+cd investment-platform
+npm install
+echo "NEXT_PUBLIC_API_URL=http://localhost:8080" > .env.local
+npm run dev
+# → http://localhost:3000
 ```
 
-#### 4. Configurer `.env`
-
-Créer `investment_agent/.env` :
+### Test avec modèles locaux (optionnel)
 
 ```bash
-# Google Gemini API
-GOOGLE_API_KEY=votre_clé_api_ici
+# Installer Ollama
+brew install ollama
+ollama pull llama3.2:3b   # léger mais limité
+ollama pull mistral:7b    # meilleur mais lourd (8 GB RAM min)
 
-# (Optionnel) Si vous voulez tester avec Ollama
-# ADK_MODEL_PROVIDER=ollama
-# ADK_MODEL_NAME=ollama/llama3.2
-```
+# Changer le modèle dans agent.py
+_MODEL = "ollama/llama3.2:3b"
 
-**Obtenir une clé API** :
-
-1. Aller à [aistudio.google.com](https://aistudio.google.com/app/apikey)
-2. Cliquer "Create API Key"
-3. Copier la clé
-4. Coller dans `.env`
-
-#### 5. Vérifier l'installation
-
-```bash
-python -c "from investment_agent.agent import root_agent; print('✅ OK')"
-```
-
----
-
-## 🚀 Lancement
-
-### Option A : Lancer l'analyse (recommandé)
-
-#### Avec requête par défaut
-
-```bash
+# Lancer
 python main.py
-```
-
-**Sortie** :
-
-```
-══════════════════════════════════════════════════════════════
-  💼  INVESTMENT ADVISOR — Plateforme Multi-Agents ADK
-══════════════════════════════════════════════════════════════
-  📝  Query : Analyse AAPL et BTC pour moi. Je veux investir...
-══════════════════════════════════════════════════════════════
-
-────────────────────────────────────────────────────────────
-🤖  [1] InvestmentAdvisor — démarré
-────────────────────────────────────────────────────────────
-
-[...log détaillé...]
-
-✅ FINAL REPORT:
-{
-  "portfolio_decision": "Executive summary...",
-  "audit_trail": [...]
-}
-```
-
-#### Avec requête personnalisée
-
-```bash
-python main.py --query "Analyse NVDA et SOL pour 50000$ en profil agressif"
-```
-
-### Option B : Lancer les tests
-
-```bash
-python -m pytest tests/test_pipeline.py -v
-```
-
-### Option C : Web UI (ADK Web)
-
-```bash
-adk web
-# Ouvre http://localhost:8000
+# ⚠️ Attendez-vous à des hallucinations de tools avec ces modèles
 ```
 
 ---
 
-## 🧪 Exemples de requêtes
+## 🚀 Lancement {#lancement}
 
-### Requête 1 : Analyse simple (actions + crypto)
+### Via l'interface web
+
+1. Ouvrir le frontend Vercel
+2. Aller sur **Analyser**
+3. Taper une requête ou cliquer sur une suggestion
+4. Attendre 30-60 secondes le pipeline complet
+5. Consulter les rapports de chaque agent
+
+### Via l'API directement
 
 ```bash
-python main.py --query "Analyse AAPL et BTC pour 100000 dollars"
+curl -X POST https://investment-agent-449502745670.europe-west1.run.app/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Analyse NVDA et BTC", "user_id": "test"}'
 ```
 
-**Attentes** :
+### Via main.py (local)
 
-- Rapports marché (prix, RSI, MACD)
-- Sentiment news (bullish/bearish)
-- Score de risque
-- Allocation : ~40% stocks, ~40% crypto, ~20% cash
-- Top 3 picks : AAPL, BTC, + recommandation
+```bash
+python main.py --query "Analyse NVDA pour $50,000 profil agressif"
+```
+
+### Via ADK Web
+
+```bash
+adk web investment_agent/
+# → http://localhost:8000
+```
 
 ---
 
-### Requête 2 : Portefeuille diversifié
+## 🧪 Exemples de requêtes {#exemples-de-requêtes}
 
-```bash
-python main.py --query \
-  "Je veux diversifier mon portefeuille : 50000 dollars. \
-   Analyse MSFT NVDA TSLA GOOGL BTC ETH SPY. \
-   Profil modéré, horizon 12 mois."
 ```
-
-**Attentes** :
-
-- Analyse tech heavy (4 mega-caps)
-- Équilibre entre actions et crypto
-- Stratégie de rebalancing
-- Max 5% par position
+"Analyse NVDA et BTC pour moi"
+"Stratégie MODERATE sur $50,000 avec GOOGL et AMZN"
+"Donne-moi une stratégie aggressive sur la tech avec $100,000"
+"Portfolio conservateur $500,000 avec VTI QQQ GLD, horizon 5 ans"
+"Analyse BTC ETH SOL pour $10,000 profil agressif"
+```
 
 ---
 
-### Requête 3 : Investissement conservateur
-
-```bash
-python main.py --query \
-  "Portfolio conservateur : 500000 dollars. \
-   Considère VTI QQQ GLD. \
-   Je suis prudent, horizon 5 ans, besoin de revenus."
-```
-
-**Attentes** :
-
-- Faible risque (score < 30)
-- Accent sur bonds/alternatives
-- Dividendes inclus
-- Stops larges (5-7%)
-
----
-
-### Requête 4 : Opportunité tactique
-
-```bash
-python main.py --query \
-  "Marché en correction. AAPL GOOGL sont à -15%. \
-   Capital disponible : 20000 dollars. \
-   Profil agressif, buy-the-dip opportune."
-```
-
-**Attentes** :
-
-- Score de risque modéré (entrée en correction)
-- Recommandation INVEST (valuations attrayantes)
-- Positions concentrées (30% par pick)
-- Stops serrés (3-5%)
-
----
-
-### Requête 5 : Crypto focus
-
-```bash
-python main.py --query \
-  "Je veux m'exposer à la crypto. 10000 dollars. \
-   Analyse BTC ETH SOL BNB XRP. \
-   Comprends les risques, profil agressif."
-```
-
-**Attentes** :
-
-- Risk score élevé (volatilité crypto)
-- Avertissement : concentration risk
-- Position max 20% par asset
-- Rebalancing mensuel
-
----
-
-## 📁 Structure du projet
+## 📁 Structure du projet {#structure-du-projet}
 
 ```
-TP_multi_agents/
-├── README.md                          ← Ce fichier
-├── Overview.md                        ← Journal détaillé du développement
-├── main.py                            ← 🚀 Entry point (Runner programmatique)
+TP-Projet-Multi-Agents-ADK/
+├── README.md
+├── main.py                            ← Entry point local
+├── server.py                          ← FastAPI wrapper (API REST)
+├── Dockerfile                         ← Conteneurisation Cloud Run
+├── requirements.txt
+├── setup_gcp.sh                       ← Script configuration GCP
+│
+├── .github/
+│   └── workflows/
+│       └── deploy.yml                 ← CI/CD GitHub Actions
 │
 ├── investment_agent/
-│   ├── __init__.py                    ← Expose root_agent pour adk web
-│   ├── agent.py                       ← 🧠 5 LlmAgents + 2 Workflow Agents
-│   ├── .env                           ← 🔑 Configuration (API keys)
-│   │
-│   └── tools/
-│       ├── __init__.py
-│       ├── market_tools.py            ← get_market_data, get_technical_indicators
-│       ├── news_tools.py              ← get_news_sentiment, get_economic_indicators
-│       └── portfolio_tools.py         ← calculate_portfolio_allocation, assess_risk_score
+│   ├── __init__.py
+│   ├── agent.py                       ← 6 LlmAgents + 2 Workflow Agents
+│   └── tools/                         ← Mock data (vraies APIs prévues)
+│       ├── market_tools.py            ← Simule prix, RSI, MACD
+│       ├── news_tools.py              ← Simule headlines, sentiment
+│       └── portfolio_tools.py         ← Allocation + risk score
 │
 ├── tests/
-│   ├── test_pipeline.py               ← Tests fonctionnels
-│   └── investment_scenarios.test.json ← Scénarios de test
+│   ├── test_pipeline.py
+│   └── investment_scenarios.test.json
 │
-└── .adk/                              ← Fichiers de config ADK
+└── investment-platform/               ← Frontend Next.js
+    ├── app/
+    │   ├── page.tsx                   ← Dashboard
+    │   ├── analyze/page.tsx           ← Chatbot IA
+    │   └── history/page.tsx           ← Historique
+    ├── components/Sidebar.tsx
+    ├── lib/api.ts                     ← Client API
+    └── package.json
 ```
 
 ---
 
-## ✅ Contraintes techniques satisfaites
+## ✅ Contraintes techniques satisfaites {#contraintes-techniques-satisfaites}
 
-| Contrainte                          | Détail                                                                                                                                    | Code                           |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| **C1 : ≥ 5 LlmAgents**              | MarketAnalysisAgent, NewsAgent, RiskAnalysisAgent, StrategyAgent, DecisionAgent + bonus InvestmentAdvisor                                 | `agent.py:211+`                |
-| **C2 : ≥ 6 tools custom**           | get_market_data, get_technical_indicators, get_news_sentiment, get_economic_indicators, calculate_portfolio_allocation, assess_risk_score | `tools/*.py`                   |
-| **C3 : ≥ 2 Workflow Agents**        | SequentialAgent (AnalysisPipeline) + LoopAgent (StrategyRefinementLoop)                                                                   | `agent.py:365+`                |
-| **C4 : State partagé & output_key** | Tous les agents ont `output_key=` unique + `{variable}` templates                                                                         | `agent.py:207, 238, 266...`    |
-| **C5 : 2 délégations**              | transfer_to_agent (InvestmentAdvisor→AnalysisPipeline) + AgentTool (DecisionAgent→StrategyAgent)                                          | `agent.py:380, 345`            |
-| **C6 : 3 callbacks**                | before_agent_callback, before_model_callback, after_model_callback                                                                        | `agent.py:75+`                 |
-| **C7 : Runner programmatique**      | InMemorySessionService + Runner + async execution                                                                                         | `main.py:51+`                  |
-| **C8 : Compatible adk web**         | root_agent exposé dans `__init__.py`                                                                                                      | `investment_agent/__init__.py` |
-
----
-
-## 🔍 Debugging
-
-### Activer les logs détaillés
-
-```python
-import logging
-logging.basicConfig(level=logging.DEBUG)
-```
-
-### Vérifier la clé API
-
-```bash
-python -c "import os; print('GOOGLE_API_KEY' in os.environ)"
-```
-
-### Simuler un agent seul
-
-```python
-from investment_agent.agent import market_analysis_agent
-from google.adk.sessions import InMemorySessionService
-
-session_service = InMemorySessionService()
-# ... rest of test
-```
+| Contrainte                          | Détail                                                                                                                                    | Satisfait |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| **C1 : ≥ 5 LlmAgents**              | IntentAgent, MarketAnalysisAgent, NewsAgent, RiskAnalysisAgent, StrategyAgent, DecisionAgent (6 au total)                                 | ✅        |
+| **C2 : ≥ 6 tools custom**           | get_market_data, get_technical_indicators, get_news_sentiment, get_economic_indicators, calculate_portfolio_allocation, assess_risk_score | ✅        |
+| **C3 : ≥ 2 Workflow Agents**        | SequentialAgent (AnalysisPipeline) + LoopAgent (StrategyRefinementLoop)                                                                   | ✅        |
+| **C4 : State partagé & output_key** | Tous les agents ont `output_key` unique + templates `{variable}`                                                                          | ✅        |
+| **C5 : 2 délégations**              | transfer_to_agent (InvestmentAdvisor→Pipeline) + AgentTool (DecisionAgent→StrategyAgent)                                                  | ✅        |
+| **C6 : 3 callbacks**                | before_agent_callback, before_model_callback, after_model_callback                                                                        | ✅        |
+| **C7 : Runner programmatique**      | InMemorySessionService + Runner + async                                                                                                   | ✅        |
+| **C8 : Compatible adk web**         | root_agent exposé dans `__init__.py`                                                                                                      | ✅        |
 
 ---
 
-## 📖 Documentation
+## 🔭 Perspectives {#perspectives}
 
-- **Overview.md** : Journal complet du développement, défis rencontrés, décisions architecturales
-- **agent.py** : Commentaires détaillés sur chaque agent et callback
-- **main.py** : Guide d'utilisation du Runner
-
----
-
-## 📞 Support
-
-Pour questions ou problèmes :
-
-1. Vérifier `.env` est correctement configuré
-2. Vérifier clé API Google est valide
-3. Lire `Overview.md` pour context historique
-4. Consulter les tests dans `tests/test_pipeline.py`
+- [ ] Remplacer les mock data par de vraies APIs financières (Yahoo Finance, Alpha Vantage, NewsAPI, FRED)
+- [ ] Ajouter l'authentification utilisateur sur le frontend
+- [ ] Persistance de l'historique en base de données (Firestore)
+- [ ] Notifications en temps réel via WebSockets
+- [ ] Support multi-portefeuilles par utilisateur
+- [ ] Backtesting sur données historiques réelles
 
 ---
-
-## 📜 Licence
-
-Projet éducatif — TP ADK Multi-Agents.

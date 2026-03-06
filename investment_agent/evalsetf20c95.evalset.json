@@ -1,0 +1,106 @@
+{
+  "eval_set_id": "evalsetf20c95",
+  "name": "evalsetf20c95",
+  "eval_cases": [
+    {
+      "eval_id": "caseeb1bf3",
+      "conversation": [],
+      "session_input": {
+        "app_name": "investment_agent",
+        "user_id": "user",
+        "state": {
+          "user_message": "",
+          "prefetched_market": "",
+          "prefetched_news": "",
+          "prefetched_macro": "",
+          "prefetched_risk": "",
+          "prefetched_allocation": "",
+          "market_analysis": "",
+          "news_impact": "",
+          "risk_assessment": ""
+        }
+      },
+      "creation_timestamp": 1772797824.9350889
+    },
+    {
+      "eval_id": "casea2876f",
+      "conversation": [
+        {
+          "invocation_id": "e-088c9c72-2354-43a4-bdc4-e6053cb488fc",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Stratégie MODERATE sur $50,000 avec GOOGL et AMZN"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "## Final Investment Decision Report\n\n**Executive Summary:**\n\n**Recommended Action: HOLD**\n\nWhile the \"StrategyAgent\" has provided a BALANCED strategy with specific trade ideas, the overall market sentiment remains BEARISH, and the risk assessment indicates a HIGH level of risk. The recommended action is to HOLD the current portfolio and focus on implementing the risk mitigation strategies before making significant new investments. The proposed allocation adjustments and selective investments in GOOGL are noted, but should be considered within the context of the broader risk environment.\n\n**Portfolio Allocation:**\n\nThe following table outlines the target asset allocation based on the BALANCED strategy for a $50,000 capital.\n\n| Asset Class   | Percentage | Amount (USD) |\n| :------------ | :--------- | :----------- |\n| Stocks        | 55%        | $27,500      |\n| Bonds         | 25%        | $12,500      |\n| Cash          | 10%        | $5,000       |\n| Alternatives  | 10%        | $5,000       |\n\n**Top 3 Investment Picks (Based on StrategyAgent's Recommendations):**\n\n1.  **Broad-Market Bond ETF:**\n    *   **Entry Price:** N/A (Will be determined at the time of purchase)\n    *   **Target Price:** N/A\n    *   **Stop-Loss:** N/A (Bond ETFs typically do not have hard stop-losses unless actively managed)\n    *   **Rationale:** To increase portfolio stability and reduce overall volatility in the current BEARISH market environment with HIGH overall risk. This aligns with risk mitigation recommendations.\n\n2.  **GOOGL:**\n    *   **Entry Price:** $172.03 (Current Market Price)\n    *   **Target Price:** $185.00 (Estimated based on positive sentiment and technicals)\n    *   **Stop-Loss:** $159.99 (Approximately 7% below entry, respecting the risk assessment's recommendation)\n    *   **Rationale:** Positive news sentiment, bullish MACD, detected Golden Cross, and recent positive 24h performance suggest potential for upside, despite being below the 50-day MA.\n\n3.  **AMZN:**\n    *   **Action:** Reduce exposure.\n    *   **Rationale:** Significant headwinds from regulatory probes, supply chain issues, and negative sentiment outweigh current bullish technicals for a moderate risk profile in a bearish market.\n\n**Risk Management Rules:**\n\n*   **Maximum Loss Per Position:** 7-10% of the investment amount for individual stock positions.\n*   **Stop-Loss Trigger:** For GOOGL, a stop-loss order should be placed at approximately $159.99. For any other individual stock positions, hard stop-losses should be implemented at 7-10% below the entry price.\n*   **Diversification:** Aim to increase the number of uncorrelated assets to at least 15.\n*   **Asset Allocation:** Strictly adhere to the target asset allocation percentages, rebalancing quarterly or when deviations exceed 5%.\n*   **Fixed Income:** Maintain a minimum of 25% allocation to bonds.\n\n**Three Immediate Action Items for the Next 48 Hours:**\n\n1.  **Review Existing Portfolio:** Conduct a thorough review of all current holdings to ensure they align with the \"HOLD\" recommendation and the risk management rules. Identify any positions that may require immediate stop-loss adjustment or reduction.\n2.  **Research Bond ETFs:** Identify suitable broad-market bond ETFs that align with the strategy's objective of enhancing stability and reducing volatility. Prepare to allocate the recommended $2,500 once the review is complete and a suitable ETF is selected.\n3.  **Monitor GOOGL:** Closely monitor GOOGL's price action and any developing news. Prepare to execute the buy order within the 6.6% capital allocation ($3,330) if the market conditions remain favorable and the stop-loss level is established."
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "invocation_events": [
+              {
+                "author": "InvestmentAdvisor",
+                "content": {
+                  "parts": [
+                    {
+                      "function_call": {
+                        "id": "adk-71c3367c-ad4f-4e53-818f-1330d878e7b6",
+                        "args": {
+                          "agent_name": "AnalysisPipeline"
+                        },
+                        "name": "transfer_to_agent"
+                      }
+                    }
+                  ],
+                  "role": "model"
+                }
+              },
+              {
+                "author": "InvestmentAdvisor",
+                "content": {
+                  "parts": [
+                    {
+                      "function_response": {
+                        "id": "adk-71c3367c-ad4f-4e53-818f-1330d878e7b6",
+                        "name": "transfer_to_agent",
+                        "response": {
+                          "result": null
+                        }
+                      }
+                    }
+                  ],
+                  "role": "user"
+                }
+              }
+            ]
+          },
+          "creation_timestamp": 1772785777.877217
+        }
+      ],
+      "session_input": {
+        "app_name": "investment_agent",
+        "user_id": "user",
+        "state": {
+          "user_message": "",
+          "prefetched_market": "",
+          "prefetched_news": "",
+          "prefetched_macro": "",
+          "prefetched_risk": "",
+          "prefetched_allocation": "",
+          "market_analysis": "",
+          "news_impact": "",
+          "risk_assessment": ""
+        }
+      },
+      "creation_timestamp": 1772797997.8031511
+    }
+  ],
+  "creation_timestamp": 1772797819.624776
+}
