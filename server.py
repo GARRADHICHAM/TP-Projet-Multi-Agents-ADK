@@ -26,6 +26,15 @@ from investment_agent.agent import root_agent
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Liste indicative de symboles couramment supportés, exposée pour l'UI
+# (l'extraction réelle des symboles depuis le message utilisateur est
+# désormais faite par IntentAgent, cf. investment_agent/agent.py)
+_KNOWN_SYMBOLS = [
+    "AAPL", "GOOGL", "MSFT", "NVDA", "TSLA", "AMZN", "META", "NFLX", "AMD",
+    "BTC", "ETH", "SOL", "BNB", "XRP", "DOGE",
+    "SPY", "QQQ", "GLD", "VTI",
+]
+
 app = FastAPI(
     title="Investment Agent API",
     description="Plateforme d'investissement automatisée — ADK Multi-Agents",
@@ -170,7 +179,6 @@ async def list_scenarios() -> dict[str, Any]:
 
 @app.get("/symbols")
 async def list_symbols() -> dict[str, list[str]]:
-    from investment_agent.agent import _KNOWN_SYMBOLS
     return {"symbols": _KNOWN_SYMBOLS}
 
 
