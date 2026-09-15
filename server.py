@@ -10,7 +10,14 @@ import json
 import logging
 import os
 import uuid
+from pathlib import Path
 from typing import Any, Optional
+
+from dotenv import load_dotenv
+
+# Charger investment_agent/.env AVANT tout import ADK (utile en local ;
+# en production, GOOGLE_API_KEY vient de Secret Manager via l'env Cloud Run).
+load_dotenv(Path(__file__).parent / "investment_agent" / ".env")
 
 import uvicorn
 from fastapi import FastAPI, HTTPException

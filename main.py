@@ -21,6 +21,13 @@ import argparse
 import asyncio
 import json
 import logging
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Charger investment_agent/.env AVANT tout import ADK, pour que
+# GOOGLE_API_KEY soit disponible dans os.environ dès l'instanciation du client.
+load_dotenv(Path(__file__).parent / "investment_agent" / ".env")
 
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -109,7 +116,7 @@ async def run_investment_analysis(user_query: str) -> dict:
 
         # Affichage des événements intermédiaires
         agent_name = getattr(event, "author", "unknown")
-        if hasattr(event, "content") and event.content:
+        if hasattr(event, "content") and event.content and event.content.parts:
             for part in event.content.parts:
                 if getattr(part, "text", None):
                     preview = part.text[:100].replace("\n", " ")

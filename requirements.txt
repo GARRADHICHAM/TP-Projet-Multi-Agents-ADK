@@ -10,7 +10,14 @@ pydantic>=2.0.0
 #   from google.adk.sessions import InMemorySessionService
 #   from google.adk.tools import agent_tool
 #   from google.genai import types
-google-adk>=0.1.0
+# Épinglé (==) : une version non bornée (>=0.1.0) a installé 2.9.0, qui active
+# par défaut la feature expérimentale JSON_SCHEMA_FOR_FUNC_DECL — celle-ci
+# change le format des déclarations de function calls (transfer_to_agent,
+# AgentTool) et fait halluciner gemini-2.5-flash-lite (il écrit l'appel en
+# texte brut au lieu de l'exécuter). Contournée dans agent.py via
+# override_feature_enabled(...), mais on épingle aussi la version pour éviter
+# qu'un futur changement de comportement d'ADK casse le pipeline en silence.
+google-adk==2.9.0
 google-generativeai>=0.8.0
 
 # ── Utilitaires standard (utilisés dans les tools) ────────────────────────────
