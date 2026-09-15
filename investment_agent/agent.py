@@ -35,6 +35,16 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types as genai_types
 from google.adk.tools import agent_tool
+from google.adk.features import FeatureName, override_feature_enabled
+
+# ADK >=2.x active par défaut la feature expérimentale JSON_SCHEMA_FOR_FUNC_DECL,
+# qui change le format de déclaration des function calls (transfer_to_agent,
+# AgentTool). Avec gemini-2.5-flash-lite, ce format fait halluciner le modèle :
+# au lieu d'appeler réellement transfer_to_agent, il écrit l'appel en texte
+# brut (ex. "Btransfer_to_agent(agent_name='AnalysisPipeline')"), ce qui
+# interrompt silencieusement le pipeline. On désactive donc cette feature
+# pour revenir au format de déclaration stable.
+override_feature_enabled(FeatureName.JSON_SCHEMA_FOR_FUNC_DECL, False)
 
 from .tools import (
     get_market_data,
