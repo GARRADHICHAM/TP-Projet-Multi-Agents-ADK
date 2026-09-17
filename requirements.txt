@@ -18,13 +18,40 @@ pydantic>=2.0.0
 # override_feature_enabled(...), mais on épingle aussi la version pour éviter
 # qu'un futur changement de comportement d'ADK casse le pipeline en silence.
 google-adk==2.9.0
-google-generativeai>=0.8.0
+# Note : google-generativeai (SDK legacy, déprécié) a été retiré — non utilisé
+# par le code, qui passe uniquement par google.genai (via google-adk).
+
+# Épinglés pour éviter un conflit de versions entre google-adk (qui exige
+# opentelemetry-api<=1.42.1) et les paquets google-cloud-* ajoutés plus bas
+# (google-cloud-bigquery >=3.40 tire, via google-api-core>=2.36, une version
+# d'opentelemetry-api>=1.44 incompatible). google-api-core==2.34.0 est la
+# dernière version qui ne force pas cette contrainte.
+google-api-core==2.34.0
+opentelemetry-api==1.42.1
+opentelemetry-sdk==1.42.1
 
 # ── Utilitaires standard (utilisés dans les tools) ────────────────────────────
 # random, datetime, typing → stdlib Python, pas d'install nécessaire
 
 # ── Variables d'environnement ─────────────────────────────────────────────────
 python-dotenv>=1.0.0
+
+# ── GCP : Secret Manager ───────────────────────────────────────────────────────
+# Utilisé dans investment_agent/secrets.py pour charger GOOGLE_API_KEY depuis
+# Secret Manager en production (remplace l'injection via Cloud Run --set-secrets).
+google-cloud-secret-manager==2.30.0
+
+# ── GCP : BigQuery ──────────────────────────────────────────────────────────
+# Utilisé dans investment_agent/bigquery_logger.py pour persister les
+# résultats du pipeline (un résultat par agent, en fin d'exécution).
+google-cloud-bigquery==3.45.1
+
+# ── GCP : Pub/Sub ───────────────────────────────────────────────────────────
+# Utilisé dans investment_agent/pubsub_events.py (publisher, appelé depuis
+# agent.py) et investment_agent/pubsub_subscriber.py (subscriber, processus
+# séparé) pour découpler la communication entre MarketAnalysisAgent et ses
+# consommateurs en aval.
+google-cloud-pubsub==2.40.0
 
 # ── HTTP client (utile pour les tests et extensions futures) ──────────────────
 httpx>=0.27.0

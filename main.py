@@ -29,6 +29,11 @@ from dotenv import load_dotenv
 # GOOGLE_API_KEY soit disponible dans os.environ dès l'instanciation du client.
 load_dotenv(Path(__file__).parent / "investment_agent" / ".env")
 
+# Si GOOGLE_API_KEY n'a pas été posé par .env (ex: en production, où .env
+# n'existe pas), on tente de le charger depuis Secret Manager.
+from investment_agent.secrets import load_api_key
+load_api_key()
+
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types as genai_types
@@ -136,6 +141,10 @@ async def run_investment_analysis(user_query: str) -> dict:
         session_id=session.id,
     )
     final_state = final_session.state if final_session else {}
+
+    # ── 6bis. Persistance analytique dans BigQuery (best effort) ──────────────
+    from investment_agent.bigquery_logger import log_pipeline_run
+    log_pipeline_run(session.id, user_query, final_state)
 
     # ── 7. Affichage du rapport final ─────────────────────────────────────────
     print("\n" + "═" * 70)

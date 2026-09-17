@@ -29,10 +29,14 @@ import re
 import logging
 from typing import Optional
 
+import os
+
 from google.adk.agents import LlmAgent, SequentialAgent, LoopAgent
 from google.adk.agents.callback_context import CallbackContext
+from google.adk.models import Gemini
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
+from google.genai import Client as GenaiClient
 from google.genai import types as genai_types
 from google.adk.tools import agent_tool
 from google.adk.features import FeatureName, override_feature_enabled
@@ -59,6 +63,69 @@ logger = logging.getLogger(__name__)
 
 _MODEL    = "gemini-2.5-flash-lite"
 _MAX_CALLS = 3
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MODÈLE ALTERNATIF — Vertex AI (en complément de la Gemini Developer API)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Par défaut, tous les agents utilisent _MODEL comme simple chaîne de
+# caractères : ADK résout cela vers la classe `Gemini` configurée pour la
+# Gemini Developer API, authentifiée par GOOGLE_API_KEY (cf. .env).
+#
+# `Gemini` accepte aussi un `client` google-genai déjà configuré, qui prend
+# le pas sur la résolution par défaut. En lui passant un `Client(vertexai=True,
+# project=..., location=...)`, on bascule ce même modèle "gemini-2.5-flash-lite"
+# sur l'infrastructure Vertex AI, sans changer une ligne de logique d'agent :
+# transfer_to_agent, AgentTool, callbacks, output_key... tout reste identique,
+# seul le backend d'inférence change.
+#
+# Authentification : Vertex AI n'utilise PAS de clé API. Il s'appuie sur les
+# Application Default Credentials (ADC) — en local, celles posées par
+# `gcloud auth application-default login` ; sur Cloud Run, celles fournies
+# automatiquement par le compte de service d'exécution du service (aucun
+# secret à gérer). C'est un vrai avantage : une classe d'authentification
+# de moins à sécuriser que l'API key utilisée par les autres agents.
+#
+# ⚠️ Limite observée en test : sur ce modèle "lite", le function-calling
+# (AgentTool, transfer_to_agent) est moins fiable via Vertex AI que via la
+# Developer API — testé sur DecisionAgent (qui invoque StrategyAgent comme
+# AgentTool), le modèle a halluciné un nom de fonction inexistant
+# (`get_strategy` au lieu de `StrategyAgent`) alors que la Developer API ne
+# l'a jamais fait sur des dizaines d'exécutions. Row conclusion : même model
+# id, backends différents ⇒ fiabilité du tool-calling non garantie identique,
+# à valider par backend avant mise en prod. On démontre donc Vertex AI sur un
+# agent qui n'appelle aucun tool (MarketAnalysisAgent, tools=[]), où seule la
+# génération de texte est en jeu.
+_VERTEX_PROJECT  = os.environ.get("GOOGLE_CLOUD_PROJECT")
+_VERTEX_LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION", "europe-west1")
+
+
+def _resolve_model(use_vertex_env_var: str) -> str | Gemini:
+    """Modèle à utiliser pour un agent donné, selon une variable d'env.
+
+    - Variable absente/false (défaut) : _MODEL est une simple chaîne, résolue
+      par ADK vers la Gemini Developer API (GOOGLE_API_KEY), comme pour tous
+      les autres agents — comportement inchangé.
+    - Variable=true : construit un `Gemini` explicitement lié à un client
+      Vertex AI. L'agent tourne alors sur Vertex AI pendant que le reste du
+      pipeline continue d'utiliser la Gemini Developer API, démontrant que
+      les deux backends coexistent dans la même architecture ADK.
+    """
+    if os.environ.get(use_vertex_env_var, "false").lower() != "true":
+        return _MODEL
+
+    if not _VERTEX_PROJECT:
+        raise RuntimeError(
+            f"{use_vertex_env_var}=true nécessite GOOGLE_CLOUD_PROJECT "
+            "(id du projet GCP à utiliser pour Vertex AI)."
+        )
+
+    vertex_client = GenaiClient(
+        vertexai=True,
+        project=_VERTEX_PROJECT,
+        location=_VERTEX_LOCATION,
+    )
+    return Gemini(model=_MODEL, client=vertex_client)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -242,6 +309,24 @@ def after_model_callback(
     entry = f"[{name}] {preview}…" if preview else f"[{name}] (no text)"
     state["audit_trail"] = state.get("audit_trail", []) + [entry]
     logger.info("📝 audit: %s", entry)
+
+    # Découplage via Pub/Sub (C.f. pubsub_events.py) : quand le rapport de
+    # MarketAnalysisAgent est prêt, on publie un événement au lieu d'un appel
+    # direct — d'éventuels consommateurs (pubsub_subscriber.py, ou autre
+    # chose demain) le reçoivent sans que MarketAnalysisAgent ni le pipeline
+    # n'aient besoin de les connaître.
+    if name == "MarketAnalysisAgent" and preview:
+        full_text = "".join(
+            getattr(part, "text", "") or ""
+            for part in (llm_response.content.parts if llm_response.content else [])
+        )
+        from .pubsub_events import publish_market_analysis
+        publish_market_analysis(
+            session_id=callback_context.session.id,
+            user_query=state.get("user_message", ""),
+            market_analysis=full_text,
+        )
+
     return None
 
 
@@ -292,7 +377,9 @@ intent_agent = LlmAgent(
 
 market_analysis_agent = LlmAgent(
     name="MarketAnalysisAgent",
-    model=_MODEL,
+    model=_resolve_model("USE_VERTEX_AI_FOR_MARKET_ANALYSIS"),  # Gemini Developer
+                                                                  # API par défaut,
+                                                                  # Vertex AI si activé
     description="Rédige un rapport d'analyse de marché à partir des données pré-chargées.",
     instruction=(
         "You are a senior market analyst.\n\n"
@@ -410,7 +497,8 @@ strategy_tool = agent_tool.AgentTool(agent=strategy_agent)  # ← C5
 
 decision_agent = LlmAgent(
     name="DecisionAgent",
-    model=_MODEL,
+    model=_MODEL,   # Toujours Developer API : agent tool-calling (AgentTool),
+                     # cf. limite Vertex AI documentée plus haut.
     description="Chief Investment Officer — produit la décision d'investissement finale.",
     instruction=(
         "You are the Chief Investment Officer.\n\n"

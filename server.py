@@ -15,9 +15,15 @@ from typing import Any, Optional
 
 from dotenv import load_dotenv
 
-# Charger investment_agent/.env AVANT tout import ADK (utile en local ;
-# en production, GOOGLE_API_KEY vient de Secret Manager via l'env Cloud Run).
+# Charger investment_agent/.env AVANT tout import ADK (utile en local).
 load_dotenv(Path(__file__).parent / "investment_agent" / ".env")
+
+# Si GOOGLE_API_KEY n'a pas été posé par .env (le cas en production, où ce
+# fichier n'existe pas), on le charge depuis Secret Manager. C'est le seul
+# mécanisme d'injection de la clé en production désormais — Cloud Run ne la
+# monte plus lui-même via --set-secrets (cf. deploy.yml).
+from investment_agent.secrets import load_api_key
+load_api_key()
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -152,6 +158,11 @@ async def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
                 state = dict(final_session.state) if final_session and final_session.state else {}
             except Exception:
                 state = {}
+
+        # Persistance analytique dans BigQuery (best effort — ne bloque jamais
+        # la réponse HTTP, même en cas de panne BigQuery).
+        from investment_agent.bigquery_logger import log_pipeline_run
+        log_pipeline_run(session_id, request.query, state)
 
         outputs = AgentOutput(
             market_analysis=state.get("market_analysis"),
