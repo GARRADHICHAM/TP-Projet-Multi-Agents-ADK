@@ -96,8 +96,13 @@ jobs:
             --max-instances 10 \
             --concurrency   80 \
             --timeout       300 \
-            --set-secrets   "GOOGLE_API_KEY=GOOGLE_API_KEY:latest" \
             --set-env-vars  "GOOGLE_CLOUD_PROJECT=${{ env.PROJECT_ID }},FRONTEND_URL=${{ secrets.FRONTEND_URL }},PYTHONUNBUFFERED=1"
+            # GOOGLE_API_KEY n'est plus injecté ici via --set-secrets : l'app
+            # le charge elle-même depuis Secret Manager au démarrage
+            # (investment_agent/secrets.py), authentifiée par les Application
+            # Default Credentials du compte de service d'exécution Cloud Run
+            # (déjà titulaire de roles/secretmanager.secretAccessor sur le
+            # secret GOOGLE_API_KEY — aucune permission IAM à ajouter).
 
       - name: Récupérer l'URL du service
         id: get-url
